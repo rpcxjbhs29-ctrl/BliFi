@@ -11,10 +11,14 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Bluetooth permissions (required for scanning and connecting on all API levels) -->
+    <!-- Bluetooth permissions (required for scanning, connecting, and advertising on all API levels) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+
+    <!-- For foreground service on Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <application
         android:allowBackup="true"
@@ -35,5 +39,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Declare the BluetoothAdvertisingService -->
+        <service
+            android:name=".BluetoothAdvertisingService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
     </application>
 </manifest>

@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.sirvivar.blifi.MainActivity
 import com.sirvivar.blifi.R
 
@@ -28,6 +29,7 @@ class DiscoveryFragment : Fragment() {
     private val discoveredDevices = mutableListOf<ScanResult>()
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var isScanning = false
+    private var swipeRefreshLayout: SwipeRefreshLayout? = null
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
@@ -44,6 +46,7 @@ class DiscoveryFragment : Fragment() {
             super.onScanFailed(errorCode)
             Toast.makeText(context, "Scan failed with error code: $errorCode", Toast.LENGTH_SHORT).show()
             isScanning = false
+            swipeRefreshLayout?.isRefreshing = false
         }
     }
 
@@ -52,11 +55,16 @@ class DiscoveryFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View? {
         val root = inflater.inflate(R.layout.fragment_discovery, container, false)
+        swipeRefreshLayout = root.findViewById(R.id.swipe_refresh_discovery)
         recyclerView = root.findViewById(R.id.recycler_discovery)
         recyclerView?.layoutManager = LinearLayoutManager(context)
 
         discoveryAdapter = DiscoveryAdapter(discoveredDevices)
         recyclerView?.adapter = discoveryAdapter
+
+        swipeRefreshLayout?.setOnRefreshListener {
+            startBleScan()
+        }
 
         return root
     }
@@ -69,17 +77,20 @@ class DiscoveryFragment : Fragment() {
     private fun startBleScan() {
         if (bluetoothAdapter == null) {
             Toast.makeText(context, "Bluetooth not supported", Toast.LENGTH_SHORT).show()
+            swipeRefreshLayout?.isRefreshing = false
             return
         }
 
         if (!bluetoothAdapter.isEnabled) {
             Toast.makeText(context, "Bluetooth is not enabled", Toast.LENGTH_SHORT).show()
+            swipeRefreshLayout?.isRefreshing = false
             return
         }
 
         val bleScanner = bluetoothAdapter.bluetoothLeScanner
         if (bleScanner == null) {
             Toast.makeText(context, "BLE not supported", Toast.LENGTH_SHORT).show()
+            swipeRefreshLayout?.isRefreshing = false
             return
         }
 
@@ -99,6 +110,7 @@ class DiscoveryFragment : Fragment() {
                 "Missing permissions: ${missingPermissions.joinToString()}. Please grant in settings.",
                 Toast.LENGTH_LONG
             ).show()
+            swipeRefreshLayout?.isRefreshing = false
             return
         }
 
@@ -125,6 +137,8 @@ class DiscoveryFragment : Fragment() {
         } catch (e: SecurityException) {
             Toast.makeText(context, "Permission error during scan", Toast.LENGTH_SHORT).show()
             isScanning = false
+        } finally {
+            swipeRefreshLayout?.isRefreshing = false
         }
     }
 
@@ -140,5 +154,6 @@ class DiscoveryFragment : Fragment() {
         }
         recyclerView = null
         discoveryAdapter = null
+        swipeRefreshLayout = null
     }
 }

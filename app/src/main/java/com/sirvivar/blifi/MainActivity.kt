@@ -10,6 +10,7 @@ import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.ParcelUuid
 import android.widget.Toast
@@ -89,7 +90,6 @@ class MainActivity : AppCompatActivity() {
                     "Permissions denied. BLE features may not work.",
                     Toast.LENGTH_LONG
                 ).show()
-                // Optionally, show rationale dialog and retry request
             }
         }
     }
@@ -107,67 +107,28 @@ class MainActivity : AppCompatActivity() {
             ) { result ->
                 if (result.resultCode == RESULT_OK) {
                     Toast.makeText(this, "Bluetooth enabled", Toast.LENGTH_SHORT).show()
-                    startBleAdvertising()
+                    startBackgroundAdvertising()
                 } else {
                     Toast.makeText(this, "Bluetooth not enabled", Toast.LENGTH_SHORT).show()
                 }
             }
             enableBluetoothLauncher.launch(enableBtIntent)
         } else {
-            startBleAdvertising()
+            startBackgroundAdvertising()
         }
     }
 
-    private fun startBleAdvertising() {
-        if (isAdvertising) return
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Advertising permission not granted", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        advertiser = bluetoothManager.adapter.bluetoothLeAdvertiser
-
-        if (advertiser == null) {
-            Toast.makeText(this, "BLE advertising not supported", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
-            .setConnectable(true)
-            .setTimeout(0)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-            .build()
-
-        val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(true)
-            .addServiceUuid(ParcelUuid(SERVICE_UUID))
-            .build()
-
-        advertiser?.startAdvertising(settings, data, advertiseCallback)
-    }
-
-    private val advertiseCallback = object : AdvertiseCallback() {
-        override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            super.onStartSuccess(settingsInEffect)
-            isAdvertising = true
-            Toast.makeText(applicationContext, "BLE advertising started", Toast.LENGTH_SHORT).show()
-        }
-
-        override fun onStartFailure(errorCode: Int) {
-            super.onStartFailure(errorCode)
-            isAdvertising = false
-            Toast.makeText(applicationContext, "Advertising failed: $errorCode", Toast.LENGTH_SHORT).show()
+    private fun startBackgroundAdvertising() {
+        val intent = Intent(this, BluetoothAdvertisingService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        if (isAdvertising) {
-            advertiser?.stopAdvertising(advertiseCallback)
-            isAdvertising = false
-        }
+        // Note: Service continues running in background
     }
 }
