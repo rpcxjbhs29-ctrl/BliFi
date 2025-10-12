@@ -3,11 +3,13 @@ package com.sirvivar.blifi.ui.discovery
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.ParcelUuid
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.sirvivar.blifi.MainActivity
 import com.sirvivar.blifi.R
 
 class DiscoveryFragment : Fragment() {
@@ -112,7 +115,11 @@ class DiscoveryFragment : Fragment() {
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER) // Low power mode for BLE
                 .build()
 
-            bleScanner.startScan(null, scanSettings, scanCallback)
+            val scanFilter = ScanFilter.Builder()
+                .setServiceUuid(ParcelUuid(MainActivity.SERVICE_UUID))
+                .build()
+
+            bleScanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
             isScanning = true
             Toast.makeText(context, "Starting BLE scan...", Toast.LENGTH_SHORT).show()
         } catch (e: SecurityException) {

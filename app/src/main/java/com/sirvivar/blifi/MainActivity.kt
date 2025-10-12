@@ -2,10 +2,12 @@ package com.sirvivar.blifi
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -26,21 +28,9 @@ class MainActivity : AppCompatActivity() {
     private var advertiser: BluetoothLeAdvertiser? = null
     private var isAdvertising = false
 
-    // Custom UUID for BliFi chat service (can be changed)
-    private val CHAT_SERVICE_UUID = UUID.fromString("00001234-0000-1000-8000-00805F9B34FB")
-
-    private val advertiseCallback = object : AdvertiseCallback() {
-        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-            super.onStartSuccess(settingsInEffect)
-            Toast.makeText(this@MainActivity, "BLE advertising started", Toast.LENGTH_SHORT).show()
-            isAdvertising = true
-        }
-
-        override fun onStartFailure(errorCode: Int) {
-            super.onStartFailure(errorCode)
-            Toast.makeText(this@MainActivity, "Advertising failed: $errorCode", Toast.LENGTH_SHORT).show()
-            isAdvertising = false
-        }
+    companion object {
+        val SERVICE_UUID: UUID = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb") // Example UUID; replace with your custom one
+        private const val PERMISSION_REQUEST_CODE = 1001
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,7 +69,7 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.BLUETOOTH_ADVERTISE  // Added for advertising
+            Manifest.permission.BLUETOOTH_ADVERTISE
         )
     }
 
@@ -99,6 +89,7 @@ class MainActivity : AppCompatActivity() {
                     "Permissions denied. BLE features may not work.",
                     Toast.LENGTH_LONG
                 ).show()
+                // Optionally, show rationale dialog and retry request
             }
         }
     }
@@ -116,61 +107,67 @@ class MainActivity : AppCompatActivity() {
             ) { result ->
                 if (result.resultCode == RESULT_OK) {
                     Toast.makeText(this, "Bluetooth enabled", Toast.LENGTH_SHORT).show()
-                    startBleAdvertising()  // Start advertising after enabling
+                    startBleAdvertising()
                 } else {
                     Toast.makeText(this, "Bluetooth not enabled", Toast.LENGTH_SHORT).show()
                 }
             }
             enableBluetoothLauncher.launch(enableBtIntent)
         } else {
-            startBleAdvertising()  // Start if already enabled
+            startBleAdvertising()
         }
     }
 
     private fun startBleAdvertising() {
-        advertiser = bluetoothAdapter?.bluetoothLeAdvertiser
+        if (isAdvertising) return
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "Advertising permission not granted", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        advertiser = bluetoothManager.adapter.bluetoothLeAdvertiser
+
         if (advertiser == null) {
             Toast.makeText(this, "BLE advertising not supported", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // Check permission explicitly
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Advertising permission missing", Toast.LENGTH_SHORT).show()
-            return
+        val settings = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
+            .setConnectable(true)
+            .setTimeout(0)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .build()
+
+        val data = AdvertiseData.Builder()
+            .setIncludeDeviceName(true)
+            .addServiceUuid(ParcelUuid(SERVICE_UUID))
+            .build()
+
+        advertiser?.startAdvertising(settings, data, advertiseCallback)
+    }
+
+    private val advertiseCallback = object : AdvertiseCallback() {
+        override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
+            super.onStartSuccess(settingsInEffect)
+            isAdvertising = true
+            Toast.makeText(applicationContext, "BLE advertising started", Toast.LENGTH_SHORT).show()
         }
 
-        val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)  // Low power as requested
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-            .setConnectable(true)
-            .build()
-
-        val advertiseData = AdvertiseData.Builder()
-            .addServiceUuid(ParcelUuid(CHAT_SERVICE_UUID))  // Advertise chat service UUID
-            .setIncludeDeviceName(true)
-            .build()
-
-        try {
-            advertiser?.startAdvertising(settings, advertiseData, advertiseCallback)
-        } catch (e: SecurityException) {
-            Toast.makeText(this, "Permission error during advertising", Toast.LENGTH_SHORT).show()
+        override fun onStartFailure(errorCode: Int) {
+            super.onStartFailure(errorCode)
+            isAdvertising = false
+            Toast.makeText(applicationContext, "Advertising failed: $errorCode", Toast.LENGTH_SHORT).show()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         if (isAdvertising) {
-            try {
-                advertiser?.stopAdvertising(advertiseCallback)
-            } catch (e: SecurityException) {
-                // Handle revocation
-            }
+            advertiser?.stopAdvertising(advertiseCallback)
             isAdvertising = false
         }
-    }
-
-    companion object {
-        private const val PERMISSION_REQUEST_CODE = 1001
     }
 }
