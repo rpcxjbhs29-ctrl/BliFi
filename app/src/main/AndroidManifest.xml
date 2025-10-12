@@ -3,18 +3,25 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.sirvivar.blifi">
 
-        <uses-permission android:name="android.permission.BLUETOOTH" />
-        <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-        <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /> <!-- Required for Bluetooth scanning on some versions -->
-        <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-        <!-- For Android 12 (API 31) and above -->
-        <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-        <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-        <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Legacy Bluetooth permissions (normal permissions, auto-granted) -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
 
+    <!-- Location permissions (required for scanning on API 30 and below) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:maxSdkVersion="30" />
 
+    <!-- Android 12+ Bluetooth permissions (runtime) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" /> <!-- If your app advertises -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
-<application
+    <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
