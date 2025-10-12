@@ -4,7 +4,6 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -50,18 +49,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getRequiredPermissions(): Array<String> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { // Android 12+
-            arrayOf(
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.BLUETOOTH_ADVERTISE // If your app advertises
-            )
-        } else {
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        }
+        return arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT
+        )
     }
 
     override fun onRequestPermissionsResult(
@@ -75,12 +68,11 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Permissions granted", Toast.LENGTH_SHORT).show()
                 checkBluetoothEnabled()
             } else {
-                val deniedMsg = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                    "Location permissions denied. Bluetooth scanning may not work on this device."
-                } else {
-                    "Bluetooth permissions denied. App may not function properly."
-                }
-                Toast.makeText(this, deniedMsg, Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this,
+                    "Permissions denied. BLE scanning may not work.",
+                    Toast.LENGTH_LONG
+                ).show()
                 // Optionally, show rationale dialog and retry request
             }
         }
