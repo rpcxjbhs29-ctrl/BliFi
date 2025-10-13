@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/navigation_discovery">
+
+    <fragment
+        android:id="@+id/navigation_discovery"
+        android:name="com.sirvivar.blifi.ui.discovery.DiscoveryFragment"
+        android:label="Discovery" >
+        <action
+            android:id="@+id/action_discovery_to_chat"
+            app:destination="@id/navigation_chat" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_chats"
+        android:name="com.sirvivar.blifi.ui.chats.ChatsFragment"
+        android:label="Chats" />
+
+    <fragment
+        android:id="@+id/navigation_settings"
+        android:name="com.sirvivar.blifi.ui.settings.SettingsFragment"
+        android:label="Settings" />
+
+    <fragment
+        android:id="@+id/navigation_chat"
+        android:name="com.sirvivar.blifi.ui.chat.ChatFragment"
+        android:label="Chat" />
+</navigation>
