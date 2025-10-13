@@ -1,6 +1,6 @@
-package com.sirvivar.blifi.ui.discovery
+package com.sirvivar.blifi.ui.chats
 
-import android.bluetooth.le.ScanResult
+import android.bluetooth.BluetoothDevice
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -8,10 +8,10 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.sirvivar.blifi.R
 
-class DiscoveryAdapter(
-    private val devices: List<ScanResult>,
-    private val onDeviceClick: (ScanResult) -> Unit
-) : RecyclerView.Adapter<DiscoveryAdapter.DeviceViewHolder>() {
+class ChatsAdapter(
+    private val devices: List<BluetoothDevice>,
+    private val onDeviceClick: (BluetoothDevice) -> Unit
+) : RecyclerView.Adapter<ChatsAdapter.DeviceViewHolder>() {
 
     class DeviceViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val deviceName: TextView = itemView.findViewById(R.id.device_name)
@@ -24,11 +24,10 @@ class DiscoveryAdapter(
     }
 
     override fun onBindViewHolder(holder: DeviceViewHolder, position: Int) {
-        val scanResult = devices[position]
-        val device = scanResult.device
+        val device = devices[position]
         holder.deviceName.text = device.name ?: "Unknown Device"
         holder.deviceAddress.text = device.address
-        holder.itemView.setOnClickListener { onDeviceClick(scanResult) }
+        holder.itemView.setOnClickListener { onDeviceClick(device) }
     }
 
     override fun getItemCount(): Int = devices.size

@@ -15,7 +15,7 @@
 
     <fragment
         android:id="@+id/navigation_chats"
-        android:name="com.sirvivar.blifi.ui.chats.ChatsFragment"
+        android:name="com.sirvivar.blifi.ui.chats.ChatFragment"
         android:label="Chats" />
 
     <fragment

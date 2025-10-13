@@ -7,6 +7,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.ParcelUuid
@@ -21,12 +22,16 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.sirvivar.blifi.MainActivity
 import com.sirvivar.blifi.R
+import com.sirvivar.blifi.ui.chat.ChatActivity
+import com.sirvivar.blifi.ui.chats.ChatFragment
+import java.util.HashSet
 
 class DiscoveryFragment : Fragment() {
 
     private var recyclerView: RecyclerView? = null
     private var discoveryAdapter: DiscoveryAdapter? = null
     private val discoveredDevices = mutableListOf<ScanResult>()
+    private val uniqueAddresses = HashSet<String>() // For deduplication
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var isScanning = false
     private var swipeRefreshLayout: SwipeRefreshLayout? = null
@@ -35,9 +40,16 @@ class DiscoveryFragment : Fragment() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             super.onScanResult(callbackType, result)
             result?.device?.let { device ->
-                if (!discoveredDevices.any { it.device.address == device.address }) {
+                val address = device.address
+                if (!uniqueAddresses.contains(address)) {
+                    uniqueAddresses.add(address)
                     discoveredDevices.add(result)
-                    discoveryAdapter?.notifyDataSetChanged()
+                    discoveryAdapter?.notifyItemInserted(discoveredDevices.size - 1)
+                    // Update ChatFragment with unique devices
+                    val chatFragment = parentFragmentManager.fragments
+                        .filterIsInstance<ChatFragment>()
+                        .firstOrNull()
+                    chatFragment?.updateDevices(discoveredDevices.map { it.device })
                 }
             }
         }
@@ -59,7 +71,13 @@ class DiscoveryFragment : Fragment() {
         recyclerView = root.findViewById(R.id.recycler_discovery)
         recyclerView?.layoutManager = LinearLayoutManager(context)
 
-        discoveryAdapter = DiscoveryAdapter(discoveredDevices)
+        discoveryAdapter = DiscoveryAdapter(discoveredDevices) { scanResult ->
+            val intent = Intent(context, ChatActivity::class.java).apply {
+                putExtra("DEVICE_ADDRESS", scanResult.device.address)
+                putExtra("DEVICE_NAME", scanResult.device.name ?: "Unknown Device")
+            }
+            startActivity(intent)
+        }
         recyclerView?.adapter = discoveryAdapter
 
         swipeRefreshLayout?.setOnRefreshListener {
@@ -116,15 +134,18 @@ class DiscoveryFragment : Fragment() {
 
         // Permissions granted, start scanning
         try {
+            // Clear existing data for fresh scan
+            val oldSize = discoveredDevices.size
             discoveredDevices.clear()
-            discoveryAdapter?.notifyDataSetChanged()
+            uniqueAddresses.clear()
+            discoveryAdapter?.notifyItemRangeRemoved(0, oldSize)
 
             if (isScanning) {
                 bleScanner.stopScan(scanCallback)
             }
 
             val scanSettings = ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER) // Low power mode for BLE
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY) // Faster scans, fewer duplicates
                 .build()
 
             val scanFilter = ScanFilter.Builder()

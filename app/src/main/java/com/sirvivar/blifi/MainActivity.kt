@@ -107,28 +107,31 @@ class MainActivity : AppCompatActivity() {
             ) { result ->
                 if (result.resultCode == RESULT_OK) {
                     Toast.makeText(this, "Bluetooth enabled", Toast.LENGTH_SHORT).show()
-                    startBackgroundAdvertising()
+                    startBackgroundServices()
                 } else {
                     Toast.makeText(this, "Bluetooth not enabled", Toast.LENGTH_SHORT).show()
                 }
             }
             enableBluetoothLauncher.launch(enableBtIntent)
         } else {
-            startBackgroundAdvertising()
+            startBackgroundServices()
         }
     }
 
-    private fun startBackgroundAdvertising() {
-        val intent = Intent(this, BluetoothAdvertisingService::class.java)
+    private fun startBackgroundServices() {
+        val advertisingIntent = Intent(this, BluetoothAdvertisingService::class.java)
+        val chatIntent = Intent(this, BluetoothChatService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
+            startForegroundService(advertisingIntent)
+            startForegroundService(chatIntent)
         } else {
-            startService(intent)
+            startService(advertisingIntent)
+            startService(chatIntent)
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Note: Service continues running in background
+        // Note: Services continue running in background
     }
 }
