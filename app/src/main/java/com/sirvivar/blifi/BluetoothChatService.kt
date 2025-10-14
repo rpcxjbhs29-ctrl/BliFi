@@ -12,6 +12,7 @@ import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -29,19 +30,42 @@ class BluetoothChatService : Service() {
     private val connectedDevices = mutableMapOf<String, BluetoothDevice>()
     private val messageCallbacks = mutableListOf<(String, String) -> Unit>()
 
+    // For binding (ChatActivity calls sendMessage)
+    private val binder = LocalBinder()
+
+    inner class LocalBinder : Binder() {
+        fun getService(): BluetoothChatService = this@BluetoothChatService
+    }
+
     companion object {
         private const val CHANNEL_ID = "bli_fi_chat_channel"
         private const val NOTIFICATION_ID = 2
         private const val TAG = "BluetoothChatService"
-        val CHAT_CHARACTERISTIC_UUID: UUID = UUID.fromString("00002a3d-0000-1000-8000-00805f9b34fb")
+        val CHAT_CHARACTERISTIC_UUID: UUID = UUID.fromString("0000FEE1-0000-1000-8000-00805F9B34FB") // Custom for chat
     }
 
     override fun onCreate() {
         super.onCreate()
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "onCreate() started at $startTime")
+
+        // 1. Create the notification channel FIRST. This is the crucial fix.
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification())
-        setupGattServer()
-        startAdvertising()
+
+        // 2. Create a single, valid notification that uses the correct channel ID.
+        val notification = createNotification()
+
+        // 3. Start the service in the foreground.
+        startForeground(NOTIFICATION_ID, notification)
+
+        // Defer GATT/advertise to avoid blocking the main thread
+        Handler(Looper.getMainLooper()).post {
+            setupGattServer()
+            startAdvertising()
+            Log.d(TAG, "GATT/Advertise setup at ${System.currentTimeMillis() - startTime}ms total")
+        }
+
+        Log.d(TAG, "onCreate() base complete at ${System.currentTimeMillis() - startTime}ms")
     }
 
     private fun createNotificationChannel() {
@@ -51,22 +75,33 @@ class BluetoothChatService : Service() {
                 "BliFi Chat Service",
                 NotificationManager.IMPORTANCE_LOW
             )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
         }
     }
 
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("BliFi Chat Running")
-            .setContentText("BLE chat service in background")
+            .setContentText("GATT ready for connections")
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .build()
     }
 
     private fun setupGattServer() {
+        if (bluetoothAdapter == null) {
+            Log.e(TAG, "No Bluetooth adapter")
+            stopSelf()
+            return
+        }
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothGattServer = bluetoothManager.openGattServer(this, gattServerCallback)
+        if (bluetoothGattServer == null) {
+            Log.e(TAG, "Failed to open GATT server")
+            stopSelf()
+            return
+        }
+        Log.d(TAG, "GATT server opened")
 
         val service = BluetoothGattService(
             MainActivity.SERVICE_UUID,
@@ -84,54 +119,58 @@ class BluetoothChatService : Service() {
 
         service.addCharacteristic(chatCharacteristic)
         bluetoothGattServer?.addService(service)
+        Log.d(TAG, "GATT service added - ready for connections")
     }
 
     private fun startAdvertising() {
-        if (isAdvertising || bluetoothAdapter == null) return
+        if (isAdvertising || bluetoothAdapter == null || advertiser != null) return
 
         advertiser = bluetoothAdapter.bluetoothLeAdvertiser
         if (advertiser == null) {
-            stopSelf()
+            Log.e(TAG, "Failed to get advertiser")
             return
         }
 
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
-            .setConnectable(true)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setConnectable(true)  // Enable GATT connects
             .setTimeout(0)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
             .build()
 
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(true)
-            .addServiceUuid(ParcelUuid(MainActivity.SERVICE_UUID))
+            .addServiceUuid(ParcelUuid(MainActivity.SERVICE_UUID))  // For discovery
             .build()
 
         advertiser?.startAdvertising(settings, data, advertiseCallback)
+        isAdvertising = true
+        Log.d(TAG, "Advertising started for GATT discovery")
     }
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            isAdvertising = true
-            Log.d(TAG, "Advertising started successfully")
+            Log.d(TAG, "Advertising success")
         }
 
         override fun onStartFailure(errorCode: Int) {
+            Log.e(TAG, "Advertising failed: $errorCode")
             isAdvertising = false
-            Log.e(TAG, "Advertising failed with error code: $errorCode")
-            stopSelf()
         }
     }
 
     private val gattServerCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             super.onConnectionStateChange(device, status, newState)
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                connectedDevices[device.address] = device
-                Log.d(TAG, "Device connected: ${device.address}")
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                connectedDevices.remove(device.address)
-                Log.d(TAG, "Device disconnected: ${device.address}")
+            when (newState) {
+                BluetoothProfile.STATE_CONNECTED -> {
+                    connectedDevices[device.address] = device
+                    Log.d(TAG, "GATT connected: ${device.address}")
+                }
+                BluetoothProfile.STATE_DISCONNECTED -> {
+                    connectedDevices.remove(device.address)
+                    Log.d(TAG, "GATT disconnected: ${device.address}")
+                }
             }
         }
 
@@ -145,28 +184,46 @@ class BluetoothChatService : Service() {
             value: ByteArray?
         ) {
             if (characteristic.uuid == CHAT_CHARACTERISTIC_UUID) {
-                value?.let {
-                    val message = String(it)
+                value?.let { bytes ->
+                    val message = String(bytes)
+                    Log.d(TAG, "GATT write received: $message from ${device.address}")
                     Handler(Looper.getMainLooper()).post {
-                        messageCallbacks.forEach { callback ->
-                            callback(device.address, message)
-                        }
+                        messageCallbacks.forEach { it(device.address, message) }
                     }
                     if (responseNeeded) {
-                        bluetoothGattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                        bluetoothGattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, bytes)
                     }
                 }
             }
         }
+
+        override fun onCharacteristicReadRequest(
+            device: BluetoothDevice,
+            requestId: Int,
+            offset: Int,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            if (characteristic.uuid == CHAT_CHARACTERISTIC_UUID) {
+                val value = characteristic.value ?: byteArrayOf()
+                bluetoothGattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                Log.d(TAG, "GATT read request from ${device.address}")
+            }
+        }
     }
 
+    // GATT send: Notify to connected device
     fun sendMessage(deviceAddress: String, message: String): Boolean {
-        val device = connectedDevices[deviceAddress] ?: return false
+        val device = connectedDevices[deviceAddress] ?: run {
+            Log.w(TAG, "No connection to $deviceAddress")
+            return false
+        }
         val service = bluetoothGattServer?.getService(MainActivity.SERVICE_UUID) ?: return false
         val characteristic = service.getCharacteristic(CHAT_CHARACTERISTIC_UUID) ?: return false
 
-        characteristic.setValue(message.toByteArray())
-        return bluetoothGattServer?.notifyCharacteristicChanged(device, characteristic, false) == true
+        characteristic.value = message.toByteArray()
+        val success = bluetoothGattServer?.notifyCharacteristicChanged(device, characteristic, false) == true
+        if (success) Log.d(TAG, "GATT notify sent: $message to $deviceAddress")
+        return success
     }
 
     fun registerMessageCallback(callback: (String, String) -> Unit) {
@@ -177,6 +234,10 @@ class BluetoothChatService : Service() {
         messageCallbacks.remove(callback)
     }
 
+    override fun onBind(intent: Intent?): IBinder {
+        return binder
+    }
+
     override fun onDestroy() {
         if (isAdvertising) {
             advertiser?.stopAdvertising(advertiseCallback)
@@ -184,9 +245,6 @@ class BluetoothChatService : Service() {
         }
         bluetoothGattServer?.close()
         super.onDestroy()
-    }
-
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
+        Log.d(TAG, "Service destroyed")
     }
 }

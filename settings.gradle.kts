@@ -16,7 +16,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://jitpack.io") }
+        maven { setUrl("https://oss.sonatype.org/content/repositories/releases/") }
     }
 }
 

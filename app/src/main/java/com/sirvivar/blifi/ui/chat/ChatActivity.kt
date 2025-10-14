@@ -40,24 +40,29 @@ class ChatActivity : AppCompatActivity() {
     private var connectionAttempts = 0
     private val maxConnectionAttempts = 3
 
+    // Service binding for GATT send/receive
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            bluetoothChatService = (service as? BluetoothChatService)?.also {
-                isBound = true
-                it.registerMessageCallback { address, message ->
-                    if (address == deviceAddress) {
+            val binder = service as BluetoothChatService.LocalBinder
+            bluetoothChatService = binder.getService()
+            isBound = true
+            bluetoothChatService?.registerMessageCallback { address, message ->
+                if (address == deviceAddress) {
+                    runOnUiThread {
                         messages.add(Pair(false, message))
                         chatAdapter?.notifyDataSetChanged()
                         recyclerView?.smoothScrollToPosition(messages.size - 1)
-                        Log.d("ChatActivity", "Received message: $message from $address")
+                        Log.d("ChatActivity", "GATT received: $message")
                     }
                 }
             }
+            Log.d("ChatActivity", "Service bound - GATT ready")
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             isBound = false
             bluetoothChatService = null
+            Log.d("ChatActivity", "Service unbound")
         }
     }
 
@@ -66,16 +71,16 @@ class ChatActivity : AppCompatActivity() {
             super.onConnectionStateChange(gatt, status, newState)
             runOnUiThread {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    Log.d("ChatActivity", "Connected to $deviceAddress")
+                    Log.d("ChatActivity", "GATT connected to $deviceAddress")
                     Toast.makeText(this@ChatActivity, "Connected to $deviceName", Toast.LENGTH_SHORT).show()
                     gatt?.discoverServices()
-                    connectionAttempts = 0 // Reset attempts on success
+                    connectionAttempts = 0
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    Log.e("ChatActivity", "Disconnected from $deviceAddress, status: $status")
+                    Log.e("ChatActivity", "GATT disconnected from $deviceAddress, status: $status")
                     Toast.makeText(this@ChatActivity, "Disconnected. Retrying...", Toast.LENGTH_SHORT).show()
                     if (status == 133 && connectionAttempts < maxConnectionAttempts) {
                         connectionAttempts++
-                        handler.postDelayed({ connectToDevice() }, 500) // Retry with delay
+                        handler.postDelayed({ connectToDevice() }, 500)
                     } else {
                         finish()
                     }
@@ -90,9 +95,9 @@ class ChatActivity : AppCompatActivity() {
                 val characteristic = service?.getCharacteristic(BluetoothChatService.CHAT_CHARACTERISTIC_UUID)
                 if (characteristic != null) {
                     gatt.setCharacteristicNotification(characteristic, true)
-                    Log.d("ChatActivity", "Services discovered, notifications enabled")
+                    Log.d("ChatActivity", "GATT services discovered, notifications enabled")
                 } else {
-                    Log.e("ChatActivity", "Characteristic not found")
+                    Log.e("ChatActivity", "Chat characteristic not found")
                     Toast.makeText(this@ChatActivity, "Chat service not available", Toast.LENGTH_SHORT).show()
                 }
             } else {
@@ -108,7 +113,7 @@ class ChatActivity : AppCompatActivity() {
                     messages.add(Pair(false, message))
                     chatAdapter?.notifyDataSetChanged()
                     recyclerView?.smoothScrollToPosition(messages.size - 1)
-                    Log.d("ChatActivity", "Characteristic changed: $message")
+                    Log.d("ChatActivity", "GATT characteristic changed: $message")
                 }
             }
         }
@@ -116,7 +121,7 @@ class ChatActivity : AppCompatActivity() {
         override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
             super.onCharacteristicWrite(gatt, characteristic, status)
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                Log.d("ChatActivity", "Message sent successfully via GATT write")
+                Log.d("ChatActivity", "GATT write success")
             } else {
                 Log.e("ChatActivity", "GATT write failed: $status")
                 Toast.makeText(this@ChatActivity, "Failed to send message", Toast.LENGTH_SHORT).show()
@@ -144,34 +149,39 @@ class ChatActivity : AppCompatActivity() {
             val message = messageInput.text.toString().trim()
             if (message.isNotEmpty()) {
                 deviceAddress?.let { address ->
-                    if (bluetoothChatService?.sendMessage(address, message) == true) {
+                    // Prefer service-bound GATT send
+                    if (isBound && bluetoothChatService?.sendMessage(address, message) == true) {
                         messages.add(Pair(true, message))
                         chatAdapter?.notifyDataSetChanged()
                         recyclerView?.smoothScrollToPosition(messages.size - 1)
                         messageInput.text.clear()
-                        Log.d("ChatActivity", "Message sent via service: $message")
+                        Log.d("ChatActivity", "GATT message sent via service: $message")
+                        return@let
+                    }
+                    // Fallback: Direct GATT client write
+                    val service = bluetoothGatt?.getService(MainActivity.SERVICE_UUID)
+                    val characteristic = service?.getCharacteristic(BluetoothChatService.CHAT_CHARACTERISTIC_UUID)
+                    if (characteristic != null) {
+                        characteristic.value = message.toByteArray()
+                        bluetoothGatt?.writeCharacteristic(characteristic)
+                        messages.add(Pair(true, message))
+                        chatAdapter?.notifyDataSetChanged()
+                        recyclerView?.smoothScrollToPosition(messages.size - 1)
+                        messageInput.text.clear()
+                        Log.d("ChatActivity", "GATT fallback write: $message")
                     } else {
-                        // Fallback to GATT client write
-                        val service = bluetoothGatt?.getService(MainActivity.SERVICE_UUID)
-                        val characteristic = service?.getCharacteristic(BluetoothChatService.CHAT_CHARACTERISTIC_UUID)
-                        if (characteristic != null) {
-                            characteristic.value = message.toByteArray()
-                            bluetoothGatt?.writeCharacteristic(characteristic)
-                            messages.add(Pair(true, message))
-                            chatAdapter?.notifyDataSetChanged()
-                            recyclerView?.smoothScrollToPosition(messages.size - 1)
-                            messageInput.text.clear()
-                            Log.d("ChatActivity", "Fallback GATT write attempted: $message")
-                        } else {
-                            Log.e("ChatActivity", "No characteristic for write")
-                            Toast.makeText(this, "Not connected yet", Toast.LENGTH_SHORT).show()
-                        }
+                        Log.e("ChatActivity", "No GATT characteristic")
+                        Toast.makeText(this, "Not connected yet", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
         }
 
-        // Start connection
+        // Bind to GATT service
+        val serviceIntent = Intent(this, BluetoothChatService::class.java)
+        bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+
+        // Start GATT connection
         connectToDevice()
     }
 
@@ -179,32 +189,33 @@ class ChatActivity : AppCompatActivity() {
         deviceAddress?.let { address ->
             val device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address)
             bluetoothGatt = device.connectGatt(this, false, gattCallback)
-            Log.d("ChatActivity", "Attempting GATT connection to $address (attempt $connectionAttempts)")
+            Log.d("ChatActivity", "GATT connect attempt to $address (try $connectionAttempts)")
         }
     }
 
     override fun onStart() {
         super.onStart()
-        val intent = Intent(this, BluetoothChatService::class.java)
-        bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        // Service already bound in onCreate
     }
 
     override fun onStop() {
         super.onStop()
         if (isBound) {
-            bluetoothChatService?.unregisterMessageCallback { address, _ ->
-                address == deviceAddress
-            }
-            unbindService(connection)
-            isBound = false
+            bluetoothChatService?.unregisterMessageCallback { address, _ -> address == deviceAddress }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        if (isBound) {
+            unbindService(connection)
+            isBound = false
+            bluetoothChatService = null
+        }
         bluetoothGatt?.disconnect()
         bluetoothGatt?.close()
         recyclerView = null
         chatAdapter = null
+        Log.d("ChatActivity", "Destroyed")
     }
 }

@@ -1,18 +1,15 @@
 package com.sirvivar.blifi
 
 import android.Manifest
+import android.app.ForegroundServiceStartNotAllowedException
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
-import android.bluetooth.le.AdvertiseCallback
-import android.bluetooth.le.AdvertiseData
-import android.bluetooth.le.AdvertiseSettings
-import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.ParcelUuid
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -26,12 +23,11 @@ import java.util.UUID
 class MainActivity : AppCompatActivity() {
 
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
-    private var advertiser: BluetoothLeAdvertiser? = null
-    private var isAdvertising = false
 
     companion object {
         val SERVICE_UUID: UUID = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb") // Example UUID; replace with your custom one
         private const val PERMISSION_REQUEST_CODE = 1001
+        private const val TAG = "MainActivity"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,19 +115,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startBackgroundServices() {
-        val advertisingIntent = Intent(this, BluetoothAdvertisingService::class.java)
+        val startTime = System.currentTimeMillis()
         val chatIntent = Intent(this, BluetoothChatService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(advertisingIntent)
-            startForegroundService(chatIntent)
-        } else {
-            startService(advertisingIntent)
-            startService(chatIntent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(chatIntent)
+            } else {
+                startService(chatIntent)
+            }
+            Log.d(TAG, "BluetoothChatService started successfully at ${System.currentTimeMillis() - startTime}ms")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting service: ${e.message}")
+            Toast.makeText(this, "BLE service failed to start.", Toast.LENGTH_SHORT).show()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Note: Services continue running in background
+        // Note: Service continues running in background
     }
 }
