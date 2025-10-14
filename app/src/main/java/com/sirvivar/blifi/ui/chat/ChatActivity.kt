@@ -41,10 +41,20 @@ class ChatActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var connectionAttempts = 0
     private val maxConnectionAttempts = 3
-
-    // --- START OF FIX 1: ADD STATE VARIABLE ---
     @Volatile
     private var isReadyToSend = false
+
+    // --- START OF FIX 1: DEFINE THE CALLBACK AS A VARIABLE ---
+    private val messageCallback: (String, String) -> Unit = { address, message ->
+        if (address == deviceAddress) {
+            runOnUiThread {
+                messages.add(Pair(false, message))
+                chatAdapter?.notifyDataSetChanged()
+                recyclerView?.smoothScrollToPosition(messages.size - 1)
+                Log.d("ChatActivity", "Message received and UI updated: $message")
+            }
+        }
+    }
     // --- END OF FIX 1 ---
 
     private val connection = object : ServiceConnection {
@@ -52,21 +62,17 @@ class ChatActivity : AppCompatActivity() {
             val binder = service as BluetoothChatService.LocalBinder
             bluetoothChatService = binder.getService()
             isBound = true
-            bluetoothChatService?.registerMessageCallback { address, message ->
-                if (address == deviceAddress) {
-                    runOnUiThread {
-                        messages.add(Pair(false, message))
-                        chatAdapter?.notifyDataSetChanged()
-                        recyclerView?.smoothScrollToPosition(messages.size - 1)
-                        Log.d("ChatActivity", "Message received via service callback: $message")
-                    }
-                }
-            }
-            Log.d("ChatActivity", "Service bound - GATT ready")
+
+            // --- START OF FIX 2: REGISTER THE PRE-DEFINED CALLBACK ---
+            bluetoothChatService?.registerMessageCallback(messageCallback)
+            // --- END OF FIX 2 ---
+
+            Log.d("ChatActivity", "Service bound and message callback registered.")
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             isBound = false
+            bluetoothChatService?.unregisterMessageCallback(messageCallback) // Good practice to unregister here too
             bluetoothChatService = null
             Log.d("ChatActivity", "Service unbound")
         }
@@ -79,33 +85,24 @@ class ChatActivity : AppCompatActivity() {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     Log.d("ChatActivity", "GATT connected to $deviceAddress")
                     Toast.makeText(this@ChatActivity, "Connected to $deviceName", Toast.LENGTH_SHORT).show()
-                    gatt?.discoverServices()
+                    handler.post { gatt?.discoverServices() }
                     connectionAttempts = 0
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    // --- START OF FIX 2: RESET STATE ON DISCONNECT ---
                     isReadyToSend = false
-                    // --- END OF FIX 2 ---
                     Log.e("ChatActivity", "GATT disconnected from $deviceAddress, status: $status")
-                    Toast.makeText(this@ChatActivity, "Disconnected. Retrying...", Toast.LENGTH_SHORT).show()
-                    if (status == 133 && connectionAttempts < maxConnectionAttempts) {
-                        connectionAttempts++
-                        handler.postDelayed({ connectToDevice() }, 500)
-                    } else {
-                        finish()
-                    }
+                    Toast.makeText(this@ChatActivity, "Disconnected.", Toast.LENGTH_SHORT).show()
+                    finish()
                 }
             }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-            super.onServicesDiscovered(gatt, status)
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 val service = gatt?.getService(MainActivity.SERVICE_UUID)
                 val characteristic = service?.getCharacteristic(BluetoothChatService.CHAT_CHARACTERISTIC_UUID)
                 if (characteristic != null) {
                     gatt.setCharacteristicNotification(characteristic, true)
-                    val cccdUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-                    val descriptor = characteristic.getDescriptor(cccdUuid)
+                    val descriptor = characteristic.getDescriptor(BluetoothChatService.CCCD_UUID)
                     if (descriptor != null) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
@@ -113,44 +110,21 @@ class ChatActivity : AppCompatActivity() {
                             descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                             gatt.writeDescriptor(descriptor)
                         }
-                        Log.d("ChatActivity", "GATT services discovered, CCCD descriptor write initiated")
-                    } else {
-                        Log.e("ChatActivity", "CCCD descriptor not found for chat characteristic")
                     }
-                } else {
-                    Log.e("ChatActivity", "Chat characteristic not found")
                 }
-            } else {
-                Log.e("ChatActivity", "Service discovery failed: $status")
             }
         }
 
-        // --- START OF FIX 3: IMPLEMENT ON DESCRIPTOR WRITE ---
         override fun onDescriptorWrite(gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int) {
-            super.onDescriptorWrite(gatt, descriptor, status)
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d("ChatActivity", "CCCD descriptor write success. Ready to send messages.")
                 isReadyToSend = true
-            } else {
-                Log.e("ChatActivity", "CCCD descriptor write failed: $status")
             }
-        }
-        // --- END OF FIX 3 ---
-
-        override fun onCharacteristicChanged(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?) {
-            super.onCharacteristicChanged(gatt, characteristic)
-            // This is a backup way to receive messages. The service callback is the primary way.
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
-            super.onCharacteristicWrite(gatt, characteristic, status)
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d("ChatActivity", "GATT write successful")
-            } else {
-                Log.e("ChatActivity", "GATT write failed with status: $status")
-                runOnUiThread {
-                    Toast.makeText(this@ChatActivity, "Message failed to send", Toast.LENGTH_SHORT).show()
-                }
             }
         }
     }
@@ -174,41 +148,28 @@ class ChatActivity : AppCompatActivity() {
         sendButton.setOnClickListener {
             val message = messageInput.text.toString().trim()
             if (message.isNotEmpty()) {
-                // --- START OF FIX 4: CHECK IF READY BEFORE SENDING ---
                 if (!isReadyToSend) {
-                    Toast.makeText(this, "Connection not fully ready, please wait", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Connection not fully ready", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-                // --- END OF FIX 4 ---
-
-                val service = bluetoothGatt?.getService(MainActivity.SERVICE_UUID)
-                val characteristic = service?.getCharacteristic(BluetoothChatService.CHAT_CHARACTERISTIC_UUID)
-
+                val characteristic = bluetoothGatt
+                    ?.getService(MainActivity.SERVICE_UUID)
+                    ?.getCharacteristic(BluetoothChatService.CHAT_CHARACTERISTIC_UUID)
                 if (characteristic != null) {
                     characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
                     characteristic.value = message.toByteArray(Charsets.UTF_8)
-                    val success = bluetoothGatt?.writeCharacteristic(characteristic) == true
-
-                    if (success) {
-                        Log.d("ChatActivity", "GATT write initiated for: $message")
+                    if (bluetoothGatt?.writeCharacteristic(characteristic) == true) {
                         messages.add(Pair(true, message))
                         chatAdapter?.notifyDataSetChanged()
                         recyclerView?.smoothScrollToPosition(messages.size - 1)
                         messageInput.text.clear()
-                    } else {
-                        Log.e("ChatActivity", "GATT write failed locally")
-                        Toast.makeText(this, "Failed to send", Toast.LENGTH_SHORT).show()
                     }
-                } else {
-                    Log.e("ChatActivity", "GATT characteristic not found for writing.")
-                    Toast.makeText(this, "Not connected", Toast.LENGTH_SHORT).show()
                 }
             }
         }
 
         val serviceIntent = Intent(this, BluetoothChatService::class.java)
         bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
-
         connectToDevice()
     }
 
@@ -216,21 +177,20 @@ class ChatActivity : AppCompatActivity() {
         deviceAddress?.let { address ->
             val device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address)
             bluetoothGatt = device.connectGatt(this, false, gattCallback)
-            Log.d("ChatActivity", "GATT connect attempt to $address (try $connectionAttempts)")
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         if (isBound) {
-            bluetoothChatService?.unregisterMessageCallback { address, _ -> address == deviceAddress }
+            // --- START OF FIX 3: UNREGISTER THE SAME CALLBACK INSTANCE ---
+            bluetoothChatService?.unregisterMessageCallback(messageCallback)
+            // --- END OF FIX 3 ---
             unbindService(connection)
             isBound = false
         }
         bluetoothGatt?.disconnect()
         bluetoothGatt?.close()
-        recyclerView = null
-        chatAdapter = null
         Log.d("ChatActivity", "Destroyed")
     }
 }
