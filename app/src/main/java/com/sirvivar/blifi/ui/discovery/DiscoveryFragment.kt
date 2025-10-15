@@ -6,59 +6,52 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
-import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.ParcelUuid
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.sirvivar.blifi.MainActivity
 import com.sirvivar.blifi.R
-import com.sirvivar.blifi.ui.chat.ChatActivity
-import com.sirvivar.blifi.ui.chats.ChatFragment
+import com.sirvivar.blifi.ui.SharedViewModel
 import java.util.HashSet
 
 class DiscoveryFragment : Fragment() {
 
-    private var recyclerView: RecyclerView? = null
-    private var discoveryAdapter: DiscoveryAdapter? = null
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var discoveryAdapter: DiscoveryAdapter
+    private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private val discoveredDevices = mutableListOf<ScanResult>()
-    private val uniqueAddresses = HashSet<String>() // For deduplication
+    private val uniqueAddresses = HashSet<String>()
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var isScanning = false
-    private var swipeRefreshLayout: SwipeRefreshLayout? = null
+
+    private val sharedViewModel: SharedViewModel by activityViewModels()
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             super.onScanResult(callbackType, result)
-            result?.device?.let { device ->
-                val address = device.address
-                if (!uniqueAddresses.contains(address)) {
-                    uniqueAddresses.add(address)
+            result?.device?.address?.let { address ->
+                if (uniqueAddresses.add(address)) {
                     discoveredDevices.add(result)
-                    discoveryAdapter?.notifyItemInserted(discoveredDevices.size - 1)
-                    // Update ChatFragment with unique devices
-                    val chatFragment = parentFragmentManager.fragments
-                        .filterIsInstance<ChatFragment>()
-                        .firstOrNull()
-                    chatFragment?.updateDevices(discoveredDevices.map { it.device })
+                    discoveryAdapter.notifyItemInserted(discoveredDevices.size - 1)
                 }
             }
         }
 
         override fun onScanFailed(errorCode: Int) {
-            super.onScanFailed(errorCode)
-            Toast.makeText(context, "Scan failed with error code: $errorCode", Toast.LENGTH_SHORT).show()
-            isScanning = false
-            swipeRefreshLayout?.isRefreshing = false
+            Toast.makeText(context, "Scan failed: $errorCode", Toast.LENGTH_SHORT).show()
+            stopBleScan()
         }
     }
 
@@ -69,22 +62,24 @@ class DiscoveryFragment : Fragment() {
         val root = inflater.inflate(R.layout.fragment_discovery, container, false)
         swipeRefreshLayout = root.findViewById(R.id.swipe_refresh_discovery)
         recyclerView = root.findViewById(R.id.recycler_discovery)
-        recyclerView?.layoutManager = LinearLayoutManager(context)
 
-        discoveryAdapter = DiscoveryAdapter(discoveredDevices) { scanResult ->
-            val intent = Intent(context, ChatActivity::class.java).apply {
-                putExtra("DEVICE_ADDRESS", scanResult.device.address)
-                putExtra("DEVICE_NAME", scanResult.device.name ?: "Unknown Device")
-            }
-            startActivity(intent)
-        }
-        recyclerView?.adapter = discoveryAdapter
+        setupRecyclerView()
 
-        swipeRefreshLayout?.setOnRefreshListener {
+        swipeRefreshLayout.setOnRefreshListener {
             startBleScan()
         }
 
         return root
+    }
+
+    private fun setupRecyclerView() {
+        discoveryAdapter = DiscoveryAdapter(discoveredDevices) { scanResult ->
+            stopBleScan()
+            sharedViewModel.selectDevice(scanResult)
+            activity?.findViewById<BottomNavigationView>(R.id.nav_view)?.selectedItemId = R.id.navigation_chats
+        }
+        recyclerView.layoutManager = LinearLayoutManager(context)
+        recyclerView.adapter = discoveryAdapter
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -93,88 +88,55 @@ class DiscoveryFragment : Fragment() {
     }
 
     private fun startBleScan() {
-        if (bluetoothAdapter == null) {
-            Toast.makeText(context, "Bluetooth not supported", Toast.LENGTH_SHORT).show()
-            swipeRefreshLayout?.isRefreshing = false
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(context, "Bluetooth Scan permission not granted", Toast.LENGTH_SHORT).show()
             return
         }
 
-        if (!bluetoothAdapter.isEnabled) {
-            Toast.makeText(context, "Bluetooth is not enabled", Toast.LENGTH_SHORT).show()
-            swipeRefreshLayout?.isRefreshing = false
-            return
+        if (isScanning) {
+            stopBleScan()
         }
 
-        val bleScanner = bluetoothAdapter.bluetoothLeScanner
-        if (bleScanner == null) {
-            Toast.makeText(context, "BLE not supported", Toast.LENGTH_SHORT).show()
-            swipeRefreshLayout?.isRefreshing = false
-            return
-        }
+        discoveredDevices.clear()
+        uniqueAddresses.clear()
+        discoveryAdapter.notifyDataSetChanged()
 
-        // Check required permissions
-        val requiredPermissions = arrayOf(
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        )
+        val scanFilter = ScanFilter.Builder()
+            .setServiceUuid(ParcelUuid(MainActivity.SERVICE_UUID))
+            .build()
 
-        val missingPermissions = requiredPermissions.filter {
-            ContextCompat.checkSelfPermission(requireContext(), it) != PackageManager.PERMISSION_GRANTED
-        }
+        val scanSettings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
 
-        if (missingPermissions.isNotEmpty()) {
-            Toast.makeText(
-                context,
-                "Missing permissions: ${missingPermissions.joinToString()}. Please grant in settings.",
-                Toast.LENGTH_LONG
-            ).show()
-            swipeRefreshLayout?.isRefreshing = false
-            return
-        }
-
-        // Permissions granted, start scanning
+        // ⭐️ FIX: Catch potential SecurityException from the OS
         try {
-            // Clear existing data for fresh scan
-            val oldSize = discoveredDevices.size
-            discoveredDevices.clear()
-            uniqueAddresses.clear()
-            discoveryAdapter?.notifyItemRangeRemoved(0, oldSize)
-
-            if (isScanning) {
-                bleScanner.stopScan(scanCallback)
-            }
-
-            val scanSettings = ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY) // Faster scans, fewer duplicates
-                .build()
-
-            val scanFilter = ScanFilter.Builder()
-                .setServiceUuid(ParcelUuid(MainActivity.SERVICE_UUID))
-                .build()
-
-            bleScanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
+            bluetoothAdapter?.bluetoothLeScanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
             isScanning = true
-            Toast.makeText(context, "Starting BLE scan...", Toast.LENGTH_SHORT).show()
+            swipeRefreshLayout.isRefreshing = true
         } catch (e: SecurityException) {
-            Toast.makeText(context, "Permission error during scan", Toast.LENGTH_SHORT).show()
-            isScanning = false
-        } finally {
-            swipeRefreshLayout?.isRefreshing = false
+            Log.e("DiscoveryFragment", "Failed to start scan due to SecurityException", e)
+            Toast.makeText(context, "Scan failed: Lacking privileged permissions.", Toast.LENGTH_LONG).show()
+            swipeRefreshLayout.isRefreshing = false
         }
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        if (isScanning) {
+    private fun stopBleScan() {
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
             try {
                 bluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
             } catch (e: SecurityException) {
-                // Handle case where permission was revoked during scan
+                Log.e("DiscoveryFragment", "Failed to stop scan due to SecurityException", e)
             }
-            isScanning = false
         }
-        recyclerView = null
-        discoveryAdapter = null
-        swipeRefreshLayout = null
+        isScanning = false
+        swipeRefreshLayout.isRefreshing = false
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (isScanning) {
+            stopBleScan()
+        }
     }
 }
