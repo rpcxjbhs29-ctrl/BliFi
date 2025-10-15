@@ -1,10 +1,7 @@
 package com.sirvivar.blifi
 
 import android.Manifest
-import android.app.ForegroundServiceStartNotAllowedException
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -22,10 +19,12 @@ import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
 
-    private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+    private val bluetoothAdapter: BluetoothAdapter? by lazy {
+        BluetoothAdapter.getDefaultAdapter()
+    }
 
     companion object {
-        val SERVICE_UUID: UUID = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb") // Example UUID; replace with your custom one
+        val SERVICE_UUID: UUID = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb")
         private const val PERMISSION_REQUEST_CODE = 1001
         private const val TAG = "MainActivity"
     }
@@ -37,13 +36,8 @@ class MainActivity : AppCompatActivity() {
         val navView: BottomNavigationView = findViewById(R.id.nav_view)
         val navController = findNavController(R.id.nav_host_fragment_activity_main)
 
-        // Hide action bar
         supportActionBar?.hide()
-
-        // Setup bottom navigation with NavController
         navView.setupWithNavController(navController)
-
-        // Request Bluetooth and location permissions
         requestBluetoothPermissions()
     }
 
@@ -55,19 +49,23 @@ class MainActivity : AppCompatActivity() {
         if (permissionsToRequest.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, permissionsToRequest, PERMISSION_REQUEST_CODE)
         } else {
-            // All permissions granted; check if Bluetooth is enabled
             checkBluetoothEnabled()
         }
     }
 
     private fun getRequiredPermissions(): Array<String> {
-        return arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
+        val permissions = mutableListOf(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.BLUETOOTH_ADVERTISE
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+            Manifest.permission.ACCESS_FINE_LOCATION
         )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        return permissions.toTypedArray()
     }
 
     override fun onRequestPermissionsResult(
@@ -83,7 +81,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(
                     this,
-                    "Permissions denied. BLE features may not work.",
+                    "Permissions denied. App features may not work.",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -91,12 +89,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkBluetoothEnabled() {
-        if (bluetoothAdapter == null) {
-            Toast.makeText(this, "Bluetooth not supported on this device", Toast.LENGTH_LONG).show()
+        // ⭐️ FIX: Read the delegated property into a local variable.
+        val btAdapter = bluetoothAdapter
+        if (btAdapter == null) {
+            Toast.makeText(this, "Bluetooth not supported", Toast.LENGTH_LONG).show()
             return
         }
-        if (!bluetoothAdapter.isEnabled) {
-            // Prompt to enable Bluetooth
+
+        // Now, smart casting works correctly on 'btAdapter'.
+        if (!btAdapter.isEnabled) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
             val enableBluetoothLauncher = registerForActivityResult(
                 ActivityResultContracts.StartActivityForResult()
@@ -115,7 +116,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startBackgroundServices() {
-        val startTime = System.currentTimeMillis()
         val chatIntent = Intent(this, BluetoothChatService::class.java)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -123,15 +123,10 @@ class MainActivity : AppCompatActivity() {
             } else {
                 startService(chatIntent)
             }
-            Log.d(TAG, "BluetoothChatService started successfully at ${System.currentTimeMillis() - startTime}ms")
+            Log.d(TAG, "BluetoothChatService started successfully.")
         } catch (e: Exception) {
             Log.e(TAG, "Error starting service: ${e.message}")
             Toast.makeText(this, "BLE service failed to start.", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // Note: Service continues running in background
     }
 }

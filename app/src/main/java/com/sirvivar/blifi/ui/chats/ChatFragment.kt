@@ -140,19 +140,23 @@ class ChatFragment : Fragment() {
                 chatListView.isVisible = false
                 singleChatView.isVisible = true
                 activity?.title = scanResult.device.name ?: scanResult.device.address
+
+                // Tell the app this chat is now active
+                ChatEventBus.setActiveChatAddress(scanResult.device.address)
             } else {
                 disconnectGatt()
                 chatListView.isVisible = true
                 singleChatView.isVisible = false
                 activity?.title = "Chats"
+
+                // Tell the app no chat is active
+                ChatEventBus.setActiveChatAddress(null)
             }
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 ChatEventBus.events.collect { chatMessage ->
-                    // ⭐️ FINAL FIX: Check if a chat is active, instead of comparing addresses.
-                    // This handles MAC address randomization.
                     if (currentChatAddress != null) {
                         withContext(Dispatchers.Main) {
                             Log.d("ChatFragment", "EventBus message received and being displayed: '${chatMessage.text}'")
@@ -175,8 +179,14 @@ class ChatFragment : Fragment() {
         })
     }
 
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // Safeguard to ensure the active chat is cleared when the view is destroyed
+        ChatEventBus.setActiveChatAddress(null)
+    }
+
     private fun updateChatUI(text: String) {
-        messages.add(Pair(false, text)) // false = received
+        messages.add(Pair(false, text))
         messageAdapter.notifyItemInserted(messages.size - 1)
         messagesRecyclerView.scrollToPosition(messages.size - 1)
     }
