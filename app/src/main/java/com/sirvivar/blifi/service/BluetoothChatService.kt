@@ -40,6 +40,7 @@ import com.sirvivar.blifi.utils.Constants.PREF_DEVICE_NAME
 import com.sirvivar.blifi.utils.Constants.PREFS_NAME
 import com.sirvivar.blifi.utils.Constants.SERVICE_UUID
 import com.sirvivar.blifi.data.database.ChatDatabase
+import com.sirvivar.blifi.data.database.MessageEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -141,6 +142,7 @@ class BluetoothChatService : Service() {
                 false
             }
         }
+        Log.e(TAG, "Failed to find characteristic or write failed")
         return false
     }
 
@@ -198,29 +200,58 @@ class BluetoothChatService : Service() {
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            Log.d(TAG, "onServicesDiscovered status=$status")
             if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return
-            val characteristic = gatt.getService(SERVICE_UUID)?.getCharacteristic(CHAT_CHARACTERISTIC_UUID)
-            characteristic?.let {
-                gatt.setCharacteristicNotification(it, true)
-                val descriptor = it.getDescriptor(CCCD_UUID)
-                descriptor?.let { desc ->
+            
+            val service = gatt.getService(SERVICE_UUID)
+            if (service == null) {
+                Log.e(TAG, "Service not found! UUID: $SERVICE_UUID")
+                return
+            }
+
+            val characteristic = service.getCharacteristic(CHAT_CHARACTERISTIC_UUID)
+            if (characteristic != null) {
+                Log.d(TAG, "Found chat characteristic")
+                gatt.setCharacteristicNotification(characteristic, true)
+                
+                val descriptor = characteristic.getDescriptor(CCCD_UUID)
+                if (descriptor != null) {
+                    Log.d(TAG, "Found CCCD descriptor, writing enable notification value...")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        gatt.writeDescriptor(desc, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                        val result = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                        Log.d(TAG, "writeDescriptor result: $result")
                     } else {
                         @Suppress("DEPRECATION")
-                        desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                        descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                         @Suppress("DEPRECATION")
-                        gatt.writeDescriptor(desc)
+                        val result = gatt.writeDescriptor(descriptor)
+                        Log.d(TAG, "writeDescriptor result: $result")
                     }
+                } else {
+                    Log.e(TAG, "CCCD descriptor NOT found!")
                 }
+            } else {
+                Log.w(TAG, "Characteristic not found!")
             }
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             val message = String(characteristic.value, Charsets.UTF_8)
             Log.d(TAG, "CLIENT received message: $message")
-            ChatEventBus.postMessage(ChatMessage(isSentByUser = false, text = message))
+            processIncomingMessage(gatt.device, message, isServer = false)
         }
+
+        override fun onDescriptorWrite(gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS && descriptor?.uuid == CCCD_UUID) {
+                Log.d(TAG, "Notifications enabled. Sending identity...")
+                // Send IAM message to identify ourselves
+                val localName = getLocalName()
+                sendMessage("IAM:$localName")
+            } else {
+                Log.d(TAG, "onDescriptorWrite: status=$status, uuid=${descriptor?.uuid}")
+            }
+        }
+
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
@@ -235,14 +266,40 @@ class BluetoothChatService : Service() {
                 value?.let {
                     val message = String(it, Charsets.UTF_8)
                     Log.d(TAG, "SERVER received message: '$message' from ${device.address}")
-                    if (device.address != ChatEventBus.activeChatAddress.value) {
-                        showNewMessageNotification(device.address, message)
-                    }
-                    ChatEventBus.postMessage(ChatMessage(isSentByUser = false, text = message))
+                    
+                    processIncomingMessage(device, message, isServer = true)
+
                     if (responseNeeded) {
                         if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
                             bluetoothGattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
                         }
+                    }
+                }
+            }
+        }
+
+
+        override fun onDescriptorWriteRequest(
+            device: BluetoothDevice,
+            requestId: Int,
+            descriptor: BluetoothGattDescriptor,
+            preparedWrite: Boolean,
+            responseNeeded: Boolean,
+            offset: Int,
+            value: ByteArray?
+        ) {
+            if (descriptor.uuid == CCCD_UUID) {
+                Log.d(TAG, "CCCD write request received from ${device.address}")
+                if (responseNeeded) {
+                    if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                        bluetoothGattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                    }
+                }
+            } else {
+                // Respond to other descriptors if any (though we only added CCCD)
+                if (responseNeeded) {
+                    if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                        bluetoothGattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
                     }
                 }
             }
@@ -291,6 +348,14 @@ class BluetoothChatService : Service() {
             BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
             BluetoothGattCharacteristic.PERMISSION_WRITE
         )
+        
+        // Explicitly add CCCD descriptor
+        val cccdDescriptor = BluetoothGattDescriptor(
+            CCCD_UUID,
+            BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
+        )
+        chatCharacteristic.addDescriptor(cccdDescriptor)
+        
         service.addCharacteristic(chatCharacteristic)
         bluetoothGattServer?.addService(service)
     }
@@ -330,6 +395,116 @@ class BluetoothChatService : Service() {
                 Log.d(TAG, "Retrying advertising after failure...")
                 restartAdvertising()
             }, 5000) // Retry after 5 seconds
+        }
+    }
+
+    private fun getLocalName(): String {
+        val sharedPref = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sharedPref.getString(PREF_DEVICE_NAME, null) 
+            ?: bluetoothAdapter?.name 
+            ?: DEFAULT_DEVICE_NAME
+    }
+
+    private fun processIncomingMessage(device: BluetoothDevice, message: String, isServer: Boolean) {
+        if (message.startsWith("IAM:")) {
+            val name = message.substring(4).trim()
+            Log.d(TAG, "Received identity from ${device.address}: $name")
+            updateDeviceName(device.address, name)
+            
+            // If we are the server, reply with our identity
+            if (isServer) {
+                val localName = getLocalName()
+                // We need to write to the characteristic and notify
+                // Note: This might be complex if we are also receiving. 
+                // But for now, let's try to update the characteristic and notify.
+                val characteristic = bluetoothGattServer
+                    ?.getService(SERVICE_UUID)
+                    ?.getCharacteristic(CHAT_CHARACTERISTIC_UUID)
+                
+                characteristic?.let {
+                    it.value = "IAM:$localName".toByteArray(Charsets.UTF_8)
+                    if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                        bluetoothGattServer?.notifyCharacteristicChanged(device, it, false)
+                    }
+                }
+            }
+        } else {
+            // Normal chat message
+            saveIncomingMessage(device, message)
+            
+            if (isServer && device.address != ChatEventBus.activeChatAddress.value) {
+                showNewMessageNotification(device.address, message)
+            }
+            ChatEventBus.postMessage(ChatMessage(isSentByUser = false, text = message))
+        }
+    }
+
+    private fun updateDeviceName(address: String, name: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val database = ChatDatabase.getDatabase(applicationContext)
+            val sanitizedName = name.replace(Regex("[\\x00-\\x1F]"), "")
+            
+            // Update or insert device with the new name
+            val existingDevice = database.deviceDao().getDevice(address)
+            if (existingDevice != null) {
+                 database.deviceDao().upsertDevice(existingDevice.copy(name = sanitizedName, lastSeenTimestamp = System.currentTimeMillis()))
+            } else {
+                database.deviceDao().upsertDevice(
+                    com.sirvivar.blifi.data.database.DeviceEntity(
+                        address = address,
+                        name = sanitizedName,
+                        lastSeenTimestamp = System.currentTimeMillis(),
+                        isOnline = true
+                    )
+                )
+            }
+        }
+    }
+
+    private fun saveIncomingMessage(deviceObj: BluetoothDevice, text: String) {
+        val address = deviceObj.address
+        CoroutineScope(Dispatchers.IO).launch {
+            val database = ChatDatabase.getDatabase(applicationContext)
+            val messageEntity = MessageEntity(
+                deviceAddress = address,
+                text = text,
+                isSentByUser = false,
+                timestamp = System.currentTimeMillis()
+            )
+            database.messageDao().insertMessage(messageEntity)
+            
+            // Also ensure device is saved/updated
+            val existingDevice = database.deviceDao().getDevice(address)
+            
+            // Try to get name from device object, then adapter, then address
+            // Sanitize name to remove nulls or invisible chars
+            var name = deviceObj.name ?: bluetoothAdapter?.getRemoteDevice(address)?.name
+            name = name?.trim()?.replace(Regex("[\\x00-\\x1F]"), "")
+            
+            if (existingDevice == null) {
+                database.deviceDao().upsertDevice(
+                    com.sirvivar.blifi.data.database.DeviceEntity(
+                        address = address,
+                        name = name ?: address,
+                        lastSeenTimestamp = System.currentTimeMillis(),
+                        isOnline = true
+                    )
+                )
+            } else {
+                // Update name if we have a valid name and the existing one is just the address or null
+                val newName = if (!name.isNullOrEmpty() && (existingDevice.name == address || existingDevice.name.isNullOrEmpty())) {
+                    name
+                } else {
+                    existingDevice.name
+                }
+                
+                database.deviceDao().upsertDevice(
+                    existingDevice.copy(
+                        name = newName,
+                        lastSeenTimestamp = System.currentTimeMillis()
+                    )
+                )
+            }
         }
     }
 

@@ -42,6 +42,30 @@ class ChatRepository(private val database: ChatDatabase) {
             }
         }
     }
+
+    /**
+     * Get all messages for a specific device name (merging multiple addresses)
+     */
+    fun getMessagesForName(name: String): Flow<List<ChatMessage>> {
+        return kotlinx.coroutines.flow.flow {
+            val addresses = deviceDao.getAddressesForName(name)
+            // If no addresses found (e.g. manual name entry?), fallback to empty or handle
+            if (addresses.isEmpty()) {
+                emit(emptyList())
+            } else {
+                messageDao.getMessagesForAddresses(addresses).collect { entities ->
+                    val chatMessages = entities.map { entity ->
+                        ChatMessage(
+                            isSentByUser = entity.isSentByUser,
+                            text = entity.text,
+                            timestamp = entity.timestamp
+                        )
+                    }
+                    emit(chatMessages)
+                }
+            }
+        }
+    }
     
     /**
      * Update a device's online status
@@ -118,16 +142,28 @@ class ChatRepository(private val database: ChatDatabase) {
             deviceDao.getAllDevices()
         ) { messages, devices ->
             val deviceMap = devices.associateBy { it.address }
-            messages.map { message ->
+            
+            // 1. Map to initial Conversation objects
+            val allConversations = messages.map { message ->
                 val device = deviceMap[message.deviceAddress]
                 Conversation(
                     deviceAddress = message.deviceAddress,
-                    deviceName = device?.name ?: message.deviceAddress,
+                    deviceName = (device?.name ?: message.deviceAddress).trim().replace(Regex("[\\x00-\\x1F]"), ""),
                     lastMessage = message.text,
                     timestamp = message.timestamp,
                     isOnline = device?.isOnline ?: false
                 )
             }
+
+            // 2. Group by deviceName and pick the most recent one
+            allConversations
+                .groupBy { it.deviceName }
+                .map { (_, convos) ->
+                    // Return the conversation with the latest timestamp
+                    // We keep the address of the latest conversation so we can try to connect to it
+                    convos.maxByOrNull { it.timestamp }!!
+                }
+                .sortedByDescending { it.timestamp }
         }
     }
 }

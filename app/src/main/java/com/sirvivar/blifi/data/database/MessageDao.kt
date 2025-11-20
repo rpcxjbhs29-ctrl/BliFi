@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.Flow
 interface MessageDao {
     @Query("SELECT * FROM messages WHERE deviceAddress = :address ORDER BY timestamp ASC")
     fun getMessagesForDevice(address: String): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages WHERE deviceAddress IN (:addresses) ORDER BY timestamp ASC")
+    fun getMessagesForAddresses(addresses: List<String>): Flow<List<MessageEntity>>
     
     @Insert
     suspend fun insertMessage(message: MessageEntity)

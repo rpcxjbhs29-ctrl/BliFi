@@ -135,8 +135,8 @@ class ChatFragment : Fragment() {
         messages.clear()
         messageAdapter.notifyDataSetChanged()
         
-        // Load chat history
-        loadChatHistory(address)
+        // Load chat history by name to merge conversations
+        loadChatHistory(name)
         
         singleChatView.isVisible = true
         conversationListRecyclerView.isVisible = false
@@ -153,6 +153,7 @@ class ChatFragment : Fragment() {
         }
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
@@ -190,17 +191,10 @@ class ChatFragment : Fragment() {
                         messageAdapter.notifyItemInserted(messages.size - 1)
                         messagesRecyclerView.scrollToPosition(messages.size - 1)
                         
-                        // Save received message to database
-                        currentDeviceAddress?.let { address ->
-                            if (!chatMessage.isSentByUser) {
-                                chatRepository.saveMessage(
-                                    address,
-                                    chatMessage.text,
-                                    chatMessage.isSentByUser,
-                                    chatMessage.timestamp
-                                )
-                            }
-                        }
+                        // Save received message to database - MOVED TO SERVICE
+                        // currentDeviceAddress?.let { address ->
+                        //    chatRepository.saveMessage(...)
+                        // }
                     }
                 }
                 // Listen for connection state changes
@@ -286,9 +280,9 @@ class ChatFragment : Fragment() {
         }
     }
     
-    private fun loadChatHistory(deviceAddress: String) {
+    private fun loadChatHistory(name: String) {
         viewLifecycleOwner.lifecycleScope.launch {
-            chatRepository.getMessagesForDevice(deviceAddress).collect { historyMessages ->
+            chatRepository.getMessagesForName(name).collect { historyMessages ->
                 messages.clear()
                 messages.addAll(historyMessages)
                 messageAdapter.notifyDataSetChanged()
