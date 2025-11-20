@@ -173,7 +173,7 @@ class ChatFragment : Fragment() {
                 // But sharedViewModel.clearSelectedDevice() is called when we want to go back
                 if (singleChatView.isVisible) {
                     currentDeviceAddress = null
-                    chatService?.disconnectClient()
+                    // chatService?.disconnectClient() // Keep connection alive
                     singleChatView.isVisible = false
                     conversationListRecyclerView.isVisible = true
                     activity?.title = "Chats"
@@ -234,7 +234,7 @@ class ChatFragment : Fragment() {
                     // If it was opened from list (not sharedViewModel), we need to manually close it
                     if (singleChatView.isVisible) {
                         currentDeviceAddress = null
-                        chatService?.disconnectClient()
+                        // chatService?.disconnectClient() // Keep connection alive
                         singleChatView.isVisible = false
                         conversationListRecyclerView.isVisible = true
                         activity?.title = "Chats"
