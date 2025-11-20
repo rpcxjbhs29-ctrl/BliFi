@@ -4,8 +4,11 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,7 +18,8 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.findNavController
 import androidx.navigation.ui.setupWithNavController
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import java.util.UUID
+import com.sirvivar.blifi.service.BluetoothChatService
+import com.sirvivar.blifi.utils.Constants.SERVICE_UUID
 
 class MainActivity : AppCompatActivity() {
 
@@ -24,7 +28,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        val SERVICE_UUID: UUID = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb")
         private const val PERMISSION_REQUEST_CODE = 1001
         private const val TAG = "MainActivity"
     }
@@ -39,6 +42,7 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.hide()
         navView.setupWithNavController(navController)
         requestBluetoothPermissions()
+        requestBatteryOptimizationExemption()
     }
 
     private fun requestBluetoothPermissions() {
@@ -127,6 +131,29 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Error starting service: ${e.message}")
             Toast.makeText(this, "BLE service failed to start.", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(POWER_SERVICE) as? PowerManager
+            val packageName = packageName
+            
+            if (powerManager?.isIgnoringBatteryOptimizations(packageName) == false) {
+                try {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                    Toast.makeText(
+                        this,
+                        "Please disable battery optimization for continuous BLE advertising",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to request battery optimization exemption", e)
+                }
+            }
         }
     }
 }

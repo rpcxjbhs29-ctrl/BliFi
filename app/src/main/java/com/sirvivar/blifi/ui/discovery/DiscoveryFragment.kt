@@ -21,9 +21,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.sirvivar.blifi.MainActivity
 import com.sirvivar.blifi.R
 import com.sirvivar.blifi.ui.SharedViewModel
+import com.sirvivar.blifi.utils.Constants.SERVICE_UUID
 import java.util.HashSet
 
 class DiscoveryFragment : Fragment() {
@@ -102,7 +102,7 @@ class DiscoveryFragment : Fragment() {
         discoveryAdapter.notifyDataSetChanged()
 
         val scanFilter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(MainActivity.SERVICE_UUID))
+            .setServiceUuid(ParcelUuid(SERVICE_UUID))
             .build()
 
         val scanSettings = ScanSettings.Builder()
