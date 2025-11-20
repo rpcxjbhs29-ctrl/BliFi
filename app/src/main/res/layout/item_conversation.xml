@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:padding="16dp">
+
+    <!-- Profile Circle -->
+    <TextView
+        android:id="@+id/profile_circle"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:background="@drawable/circle_bg"
+        android:gravity="center"
+        android:textColor="@android:color/white"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="J" />
+
+    <!-- Device Name -->
+    <TextView
+        android:id="@+id/device_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toStartOf="@id/timestamp"
+        app:layout_constraintStart_toEndOf="@id/profile_circle"
+        app:layout_constraintTop_toTopOf="@id/profile_circle"
+        tools:text="John's Phone" />
+
+    <!-- Last Message Preview -->
+    <TextView
+        android:id="@+id/last_message"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="14sp"
+        app:layout_constraintBottom_toBottomOf="@id/profile_circle"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/profile_circle"
+        app:layout_constraintTop_toBottomOf="@id/device_name"
+        tools:text="Hey, how are you doing?" />
+
+    <!-- Timestamp -->
+    <TextView
+        android:id="@+id/timestamp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="12sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/device_name"
+        tools:text="2:30 PM" />
+
+    <!-- Online Indicator -->
+    <View
+        android:id="@+id/online_indicator"
+        android:layout_width="12dp"
+        android:layout_height="12dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/circle_bg"
+        android:backgroundTint="@android:color/holo_green_light"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/profile_circle"
+        app:layout_constraintEnd_toEndOf="@id/profile_circle"
+        tools:visibility="visible" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
