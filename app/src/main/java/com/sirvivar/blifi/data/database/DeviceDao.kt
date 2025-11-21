@@ -15,6 +15,9 @@ interface DeviceDao {
     @Query("SELECT * FROM devices WHERE address = :address")
     suspend fun getDevice(address: String): DeviceEntity?
 
+    @Query("SELECT * FROM devices WHERE address = :address")
+    fun getDeviceFlow(address: String): Flow<DeviceEntity?>
+
     @Query("SELECT address FROM devices WHERE name = :name")
     suspend fun getAddressesForName(name: String): List<String>
     

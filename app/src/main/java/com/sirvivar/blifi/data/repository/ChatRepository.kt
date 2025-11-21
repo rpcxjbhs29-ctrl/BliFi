@@ -43,6 +43,10 @@ class ChatRepository(private val database: ChatDatabase) {
         }
     }
 
+    fun getDeviceFlow(address: String): Flow<DeviceEntity?> {
+        return deviceDao.getDeviceFlow(address)
+    }
+
     /**
      * Get all messages for a specific device name (merging multiple addresses)
      */

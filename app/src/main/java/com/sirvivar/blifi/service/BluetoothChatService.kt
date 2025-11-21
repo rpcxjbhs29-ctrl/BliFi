@@ -20,6 +20,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.sirvivar.blifi.R
@@ -67,6 +68,28 @@ class BluetoothChatService : Service() {
         fun getService(): BluetoothChatService = this@BluetoothChatService
     }
 
+    private val bluetoothStateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                when (state) {
+                    BluetoothAdapter.STATE_ON -> {
+                        Log.d(TAG, "Bluetooth turned ON. Restarting advertising and GATT server.")
+                        setupGattServer()
+                        startAdvertising()
+                    }
+                    BluetoothAdapter.STATE_OFF -> {
+                        Log.d(TAG, "Bluetooth turned OFF. Stopping services.")
+                        // Cleanup is handled by system mostly, but we can reset flags
+                        isAdvertising = false
+                        bluetoothGattServer?.close()
+                        bluetoothGattServer = null
+                    }
+                }
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "BluetoothChatService"
     }
@@ -79,7 +102,9 @@ class BluetoothChatService : Service() {
         setupGattServer()
         startAdvertising()
         startPeriodicAdvertisingRestart()
-        // Removed reconnectToLastDevice() as per instructions
+        
+        // Register Bluetooth state receiver
+        registerReceiver(bluetoothStateReceiver, android.content.IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -93,6 +118,11 @@ class BluetoothChatService : Service() {
             isAdvertising = false
         }
         bluetoothGattServer?.close()
+        try {
+            unregisterReceiver(bluetoothStateReceiver)
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "Receiver not registered", e)
+        }
         Log.d(TAG, "Service destroyed")
     }
 
@@ -102,6 +132,14 @@ class BluetoothChatService : Service() {
             Log.e(TAG, "Missing BLUETOOTH_CONNECT permission")
             return
         }
+        
+        // If already connected to this device, don't disconnect and reconnect
+        if (clientGatt?.device?.address == deviceAddress && 
+            ChatEventBus.connectionState.value == ConnectionState.CONNECTED) {
+            Log.d(TAG, "Already connected to $deviceAddress, skipping reconnection")
+            return
+        }
+        
         val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
         ChatEventBus.updateConnectionState(ConnectionState.CONNECTING)
         clientGatt?.close()
@@ -333,6 +371,8 @@ class BluetoothChatService : Service() {
         startForeground(FOREGROUND_NOTIFICATION_ID, notification)
     }
 
+
+
     private fun setupGattServer() {
         if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -508,28 +548,37 @@ class BluetoothChatService : Service() {
         }
     }
 
-    private fun showNewMessageNotification(senderAddress: String, message: String) {
+
+    
+    private fun showNewMessageNotification(address: String, message: String) {
         CoroutineScope(Dispatchers.IO).launch {
             val database = ChatDatabase.getDatabase(applicationContext)
-            val device = database.deviceDao().getDevice(senderAddress)
-            val senderName = device?.name ?: senderAddress
+            val device = database.deviceDao().getDevice(address)
+            val senderName = device?.name ?: address
 
             val intent = Intent(this@BluetoothChatService, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("EXTRA_DEVICE_ADDRESS", address)
             }
-            val flag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-            val pendingIntent = PendingIntent.getActivity(this@BluetoothChatService, 0, intent, flag)
+            
+            val pendingIntent = PendingIntent.getActivity(
+                this@BluetoothChatService,
+                address.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
-            val builder = NotificationCompat.Builder(this@BluetoothChatService, MESSAGE_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_chat_bubble)
+            val notification = NotificationCompat.Builder(this@BluetoothChatService, MESSAGE_CHANNEL_ID)
                 .setContentTitle(senderName)
                 .setContentText(message)
+                .setSmallIcon(android.R.drawable.stat_notify_chat) // Use system icon
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
 
-            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                NotificationManagerCompat.from(this@BluetoothChatService).notify(MESSAGE_NOTIFICATION_ID, builder.build())
+            if (ActivityCompat.checkSelfPermission(this@BluetoothChatService, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                NotificationManagerCompat.from(this@BluetoothChatService).notify(MESSAGE_NOTIFICATION_ID + address.hashCode(), notification)
             }
         }
     }

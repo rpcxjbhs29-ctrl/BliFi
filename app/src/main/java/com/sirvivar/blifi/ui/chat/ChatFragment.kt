@@ -48,6 +48,11 @@ class ChatFragment : Fragment() {
     private lateinit var conversationAdapter: ConversationAdapter
     private lateinit var chatViewModel: ChatViewModel
 
+    // Header views
+    private lateinit var btnBack: android.widget.ImageButton
+    private lateinit var textChatName: android.widget.TextView
+    private lateinit var textChatStatus: android.widget.TextView
+
     private lateinit var messageAdapter: ChatAdapter
     private val messages = mutableListOf<ChatMessage>()
     private var currentDeviceAddress: String? = null
@@ -110,6 +115,27 @@ class ChatFragment : Fragment() {
         messageInput = root.findViewById(R.id.message_input)
         sendButton = root.findViewById(R.id.send_button)
         
+        // Initialize header views
+        btnBack = root.findViewById(R.id.btn_back)
+        textChatName = root.findViewById(R.id.text_chat_name)
+        textChatStatus = root.findViewById(R.id.text_chat_status)
+        
+        btnBack.setOnClickListener {
+             // Handle back navigation manually
+             if (singleChatView.isVisible) {
+                 sharedViewModel.clearSelectedDevice()
+                 // If it was opened from list (not sharedViewModel), we need to manually close it
+                 if (singleChatView.isVisible) {
+                     currentDeviceAddress = null
+                     // chatService?.disconnectClient() // Keep connection alive
+                     singleChatView.isVisible = false
+                     conversationListRecyclerView.isVisible = true
+                     activity?.title = "Chats"
+                     ChatEventBus.setActiveChatAddress(null)
+                 }
+             }
+        }
+        
         conversationListRecyclerView = root.findViewById(R.id.recycler_chat_list)
         setupConversationList()
         setupSingleChatView()
@@ -140,7 +166,30 @@ class ChatFragment : Fragment() {
         
         singleChatView.isVisible = true
         conversationListRecyclerView.isVisible = false
-        activity?.title = name
+        // activity?.title = name // We are using custom header now
+        
+        textChatName.text = name
+        textChatStatus.text = "Offline" // Default
+        
+        // Observe device status for this address
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatRepository.getDeviceFlow(address).collect { device ->
+                if (device != null) {
+                    textChatName.text = device.name ?: "Unknown"
+                    if (device.isOnline) {
+                        textChatStatus.text = "Online"
+                    } else {
+                        val lastSeen = if (device.lastSeenTimestamp > 0) {
+                            java.text.SimpleDateFormat("MMM dd, hh:mm a", java.util.Locale.getDefault())
+                                .format(java.util.Date(device.lastSeenTimestamp))
+                        } else {
+                            "Never"
+                        }
+                        textChatStatus.text = "Last seen: $lastSeen"
+                    }
+                }
+            }
+        }
         ChatEventBus.setActiveChatAddress(address)
         
         // Try to connect if service is ready
@@ -187,14 +236,10 @@ class ChatFragment : Fragment() {
                 // Listen for new messages
                 launch {
                     ChatEventBus.events.collect { chatMessage ->
-                        messages.add(chatMessage)
-                        messageAdapter.notifyItemInserted(messages.size - 1)
-                        messagesRecyclerView.scrollToPosition(messages.size - 1)
-                        
-                        // Save received message to database - MOVED TO SERVICE
-                        // currentDeviceAddress?.let { address ->
-                        //    chatRepository.saveMessage(...)
-                        // }
+                        // Messages from ChatEventBus are already saved to DB by the service
+                        // The loadChatHistory flow will update the UI automatically
+                        // We don't need to do anything here except maybe scroll
+                        // But loadChatHistory already handles scrolling
                     }
                 }
                 // Listen for connection state changes
@@ -257,24 +302,24 @@ class ChatFragment : Fragment() {
         sendButton.setOnClickListener {
             val messageText = messageInput.text.toString().trim()
             if (messageText.isNotEmpty()) {
-                chatService?.sendMessage(messageText)
+                val success = chatService?.sendMessage(messageText) ?: false
                 
-                val chatMessage = ChatMessage(isSentByUser = true, text = messageText)
-                messages.add(chatMessage)
-                messageAdapter.notifyItemInserted(messages.size - 1)
-                messagesRecyclerView.scrollToPosition(messages.size - 1)
-                messageInput.text.clear()
-                
-                // Save sent message to database
-                currentDeviceAddress?.let { address ->
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        chatRepository.saveMessage(
-                            address,
-                            chatMessage.text,
-                            chatMessage.isSentByUser,
-                            chatMessage.timestamp
-                        )
+                if (success) {
+                    messageInput.text.clear()
+                    
+                    // Save sent message to database - UI will update from database flow
+                    currentDeviceAddress?.let { address ->
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            chatRepository.saveMessage(
+                                address,
+                                messageText,
+                                isSentByUser = true,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        }
                     }
+                } else {
+                    Toast.makeText(context, "Failed to send message. Not connected.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -283,11 +328,15 @@ class ChatFragment : Fragment() {
     private fun loadChatHistory(name: String) {
         viewLifecycleOwner.lifecycleScope.launch {
             chatRepository.getMessagesForName(name).collect { historyMessages ->
-                messages.clear()
-                messages.addAll(historyMessages)
-                messageAdapter.notifyDataSetChanged()
-                if (messages.isNotEmpty()) {
-                    messagesRecyclerView.scrollToPosition(messages.size - 1)
+                // Always update from database (source of truth)
+                // But only if we're still showing this chat
+                if (currentDeviceAddress != null) {
+                    messages.clear()
+                    messages.addAll(historyMessages)
+                    messageAdapter.notifyDataSetChanged()
+                    if (messages.isNotEmpty()) {
+                        messagesRecyclerView.scrollToPosition(messages.size - 1)
+                    }
                 }
             }
         }

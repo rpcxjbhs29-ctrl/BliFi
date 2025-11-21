@@ -43,6 +43,58 @@ class MainActivity : AppCompatActivity() {
         navView.setupWithNavController(navController)
         requestBluetoothPermissions()
         requestBatteryOptimizationExemption()
+        
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        intent?.getStringExtra("EXTRA_DEVICE_ADDRESS")?.let { address ->
+            // We need to navigate to ChatFragment and open the chat
+            // Since we are using SharedViewModel, we can set the selected device there.
+            // However, we need the full device object or at least name.
+            // For now, let's just set the address and let ChatFragment handle it if possible,
+            // or we can try to find the device in the repository (but that's async).
+            
+            // A simpler way might be to just navigate to the chat list, 
+            // and then have the chat list (DiscoveryFragment) or ChatFragment pick it up.
+            
+            // Let's try to find the device from the BluetoothAdapter since we have the address
+            val device = bluetoothAdapter?.getRemoteDevice(address)
+            if (device != null) {
+                 // We need to access SharedViewModel. 
+                 // Since we are in Activity, we can't easily get the ViewModel scoped to Activity 
+                 // without using ViewModelProvider.
+                 val sharedViewModel = androidx.lifecycle.ViewModelProvider(this)[com.sirvivar.blifi.ui.SharedViewModel::class.java]
+                 
+                 // We need a ScanResult-like object or just the device.
+                 // SharedViewModel expects a ScanResult. Let's create a dummy one or update SharedViewModel.
+                 // Actually, SharedViewModel.selectDevice takes a ScanResult.
+                 // Let's update SharedViewModel to allow selecting by device/address or 
+                 // create a dummy ScanResult.
+                 
+                 // Creating a dummy ScanResult is a bit hacky but works for now.
+                 // android.bluetooth.le.ScanResult constructor is public.
+                 // Use the simpler constructor available since API 21
+                 val scanResult = android.bluetooth.le.ScanResult(
+                     device,
+                     null, // scanRecord
+                     0, // rssi
+                     System.nanoTime() // timestampNanos
+                 )
+                 sharedViewModel.selectDevice(scanResult)
+                 
+                 // Navigate to the chats fragment
+                 val navController = findNavController(R.id.nav_host_fragment_activity_main)
+                 if (navController.currentDestination?.id != R.id.navigation_chats) {
+                     navController.navigate(R.id.navigation_chats)
+                 }
+            }
+        }
     }
 
     private fun requestBluetoothPermissions() {
