@@ -52,6 +52,7 @@ class ChatFragment : Fragment() {
     private lateinit var btnBack: android.widget.ImageButton
     private lateinit var textChatName: android.widget.TextView
     private lateinit var textChatStatus: android.widget.TextView
+    private var backPressedCallback: OnBackPressedCallback? = null
 
     private lateinit var messageAdapter: ChatAdapter
     private val messages = mutableListOf<ChatMessage>()
@@ -99,6 +100,22 @@ class ChatFragment : Fragment() {
             activity?.unbindService(serviceConnection)
             isBound = false
         }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Set active chat to suppress notifications while viewing
+        currentDeviceAddress?.let { address ->
+            chatService?.setActiveChat(address)
+            Log.d(TAG, "onResume - Set active chat: $address")
+        }
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Clear active chat to allow notifications
+        chatService?.setActiveChat(null)
+        Log.d(TAG, "onPause - Cleared active chat")
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
@@ -163,6 +180,9 @@ class ChatFragment : Fragment() {
         
         singleChatView.isVisible = true
         conversationListRecyclerView.isVisible = false
+        
+        // Enable back callback when chat opens
+        backPressedCallback?.isEnabled = true
         
         textChatName.text = name
         textChatStatus.text = "Offline" // Default
@@ -295,25 +315,23 @@ class ChatFragment : Fragment() {
             }
         }
 
-        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
+        backPressedCallback = object : OnBackPressedCallback(false) {
             override fun handleOnBackPressed() {
                 if (singleChatView.isVisible) {
                     sharedViewModel.clearSelectedDevice()
-                    // If it was opened from list (not sharedViewModel), we need to manually close it
-                    if (singleChatView.isVisible) {
-                        currentDeviceAddress = null
-                        // chatService?.disconnectClient() // Keep connection alive
-                        singleChatView.isVisible = false
-                        conversationListRecyclerView.isVisible = true
-                        activity?.title = "Chats"
-                        ChatEventBus.setActiveChatAddress(null)
-                    }
+                    currentDeviceAddress = null
+                    singleChatView.isVisible = false
+                    conversationListRecyclerView.isVisible = true
+                    activity?.title = "BliFi Chats"
+                    ChatEventBus.setActiveChatAddress(null)
+                    isEnabled = false // Disable after handling
                 } else {
                     isEnabled = false
                     requireActivity().onBackPressedDispatcher.onBackPressed()
                 }
             }
-        })
+        }
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, backPressedCallback!!)
     }
 
     private fun setupSingleChatView() {

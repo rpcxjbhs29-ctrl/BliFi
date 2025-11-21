@@ -43,8 +43,8 @@ class ConversationAdapter(
             lastMessage.text = conversation.lastMessage ?: "No messages"
             timestamp.text = formatTimestamp(conversation.lastMessageTime)
             
-            // Set profile circle to full device name (or initial if needed)
-            profileCircle.text = name
+            // Display emoji if set, otherwise show first letter of device name
+            profileCircle.text = conversation.profileEmoji ?: name.firstOrNull()?.toString()?.uppercase() ?: "?"
             
             // Set online status
             onlineIndicator.visibility = if (conversation.isOnline) View.VISIBLE else View.GONE

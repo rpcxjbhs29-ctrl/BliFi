@@ -32,12 +32,12 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Header (Solid Black, iOS Style) -->
+        <!-- Header (Glass iOS Style) -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/chat_header"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="@color/chat_background"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_navigation_bar"
             android:elevation="0dp"
             app:layout_constraintTop_toTopOf="parent">
 
@@ -60,17 +60,21 @@
                 android:orientation="vertical"
                 android:gravity="center"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/btn_more"
+                app:layout_constraintStart_toEndOf="@+id/btn_back"
                 app:layout_constraintTop_toTopOf="parent">
 
                 <TextView
                     android:id="@+id/text_chat_name"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:textColor="@color/text_primary"
                     android:textSize="17sp"
                     android:textStyle="bold"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:paddingHorizontal="8dp"
                     tools:text="Device Name" />
 
                 <TextView
@@ -78,10 +82,23 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:visibility="visible"
-                    tools:text="Online" />
+                    android:textSize="13sp"
+                    tools:text="Offline" />
             </LinearLayout>
+            
+            <ImageButton
+                android:id="@+id/btn_more"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="More options"
+                android:src="@drawable/ic_more"
+                android:visibility="gone"
+                app:tint="@color/sent_bubble"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- Divider -->
@@ -121,7 +138,7 @@
                 android:id="@+id/message_input"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_input_field"
+                android:background="@drawable/bg_glass_input"
                 android:hint="iMessage"
                 android:importantForAutofill="no"
                 android:inputType="textCapSentences|textMultiLine"

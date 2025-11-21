@@ -7,5 +7,6 @@ data class Conversation(
     val lastMessage: String?,
     val lastMessageTime: Long,
     val isSentByUser: Boolean,
-    val isOnline: Boolean = false
+    val isOnline: Boolean = false,
+    val profileEmoji: String? = null  // Custom emoji for avatar
 )

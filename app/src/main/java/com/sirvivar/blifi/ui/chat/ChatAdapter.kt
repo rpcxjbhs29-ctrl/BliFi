@@ -43,18 +43,18 @@ class ChatAdapter(private val messages: List<ChatMessage>) :
         val params = holder.messageBubble.layoutParams as ConstraintLayout.LayoutParams
 
         if (message.isSentByUser) {
-            // Sent message (Right side, Blue bubble)
-            holder.messageBubble.setBackgroundResource(R.drawable.bg_message_sent)
-            holder.messageTimestamp.visibility = View.VISIBLE // Show timestamp for sent
+            // Sent message (Right side, Glass blue bubble)
+            holder.messageBubble.setBackgroundResource(R.drawable.bg_glass_bubble_sent)
+            holder.messageTimestamp.visibility = View.VISIBLE
             
             // Position on right
             params.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
             params.startToStart = ConstraintLayout.LayoutParams.UNSET
             params.horizontalBias = 1.0f
         } else {
-            // Received message (Left side, Gray bubble)
-            holder.messageBubble.setBackgroundResource(R.drawable.bg_message_received)
-            holder.messageTimestamp.visibility = View.VISIBLE // Show timestamp for received too? Or maybe logic differs
+            // Received message (Left side, Glass gray bubble)
+            holder.messageBubble.setBackgroundResource(R.drawable.bg_glass_bubble_received)
+            holder.messageTimestamp.visibility = View.VISIBLE
             
             // Position on left
             params.startToStart = ConstraintLayout.LayoutParams.PARENT_ID

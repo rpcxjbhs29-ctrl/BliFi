@@ -10,7 +10,7 @@ import com.sirvivar.blifi.utils.Constants.DATABASE_NAME
 
 @Database(
     entities = [MessageEntity::class, DeviceEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class ChatDatabase : RoomDatabase() {
@@ -35,6 +35,13 @@ abstract class ChatDatabase : RoomDatabase() {
             }
         }
         
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add profileEmoji to devices table (nullable for custom emoji avatars)
+                database.execSQL("ALTER TABLE devices ADD COLUMN profileEmoji TEXT")
+            }
+        }
+        
         fun getDatabase(context: Context): ChatDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -42,7 +49,7 @@ abstract class ChatDatabase : RoomDatabase() {
                     ChatDatabase::class.java,
                     DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
                 INSTANCE = instance
                 instance
