@@ -32,7 +32,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Header (Glass iOS Style) -->
+        <!-- Header (Clean BliFi Style) -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/chat_header"
             android:layout_width="match_parent"
@@ -45,7 +45,7 @@
                 android:id="@+id/btn_back"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="8dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Back"
                 android:src="@drawable/ic_back"
@@ -54,51 +54,37 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/text_chat_name"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_more"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="16dp"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end"
+                app:layout_constraintBottom_toTopOf="@+id/text_chat_status"
+                app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toEndOf="@+id/btn_back"
-                app:layout_constraintTop_toTopOf="parent">
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintVertical_chainStyle="packed"
+                tools:text="Device Name That Is Very Long" />
 
-                <TextView
-                    android:id="@+id/text_chat_name"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textColor="@color/text_primary"
-                    android:textSize="17sp"
-                    android:textStyle="bold"
-                    android:gravity="center"
-                    android:maxLines="1"
-                    android:ellipsize="end"
-                    android:paddingHorizontal="8dp"
-                    tools:text="Device Name" />
-
-                <TextView
-                    android:id="@+id/text_chat_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp"
-                    tools:text="Offline" />
-            </LinearLayout>
-            
-            <ImageButton
-                android:id="@+id/btn_more"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="4dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="More options"
-                android:src="@drawable/ic_more"
-                android:visibility="gone"
-                app:tint="@color/sent_bubble"
+            <TextView
+                android:id="@+id/text_chat_status"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="16dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintStart_toEndOf="@+id/btn_back"
+                app:layout_constraintTop_toBottomOf="@+id/text_chat_name"
+                tools:text="Offline" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- Divider -->

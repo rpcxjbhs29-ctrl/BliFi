@@ -712,12 +712,16 @@ class BluetoothChatService : Service() {
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
-                .setColor(0x0A84FF) // iOS Blue
+                .setColor(0x0A84FF) // BliFi Blue
                 .addAction(replyAction) // Direct reply action
+                .setGroup("blifi_messages") // Group for stacking
+                .setOnlyAlertOnce(false) // Alert on each new message
                 .build()
 
             if (ActivityCompat.checkSelfPermission(this@BluetoothChatService, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                NotificationManagerCompat.from(this@BluetoothChatService).notify(MESSAGE_NOTIFICATION_ID + address.hashCode(), notification)
+                // Use address hash as notification ID so messages from same device stack
+                val notificationId = address.hashCode()
+                NotificationManagerCompat.from(this@BluetoothChatService).notify(notificationId, notification)
             }
         }
     }
