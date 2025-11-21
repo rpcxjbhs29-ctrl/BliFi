@@ -72,6 +72,36 @@ class ChatRepository(private val database: ChatDatabase) {
     }
     
     /**
+     * Get all messages for a specific device ID (merging multiple addresses)
+     */
+    fun getMessagesForDeviceId(deviceId: String): Flow<List<ChatMessage>> {
+        return kotlinx.coroutines.flow.flow {
+            val addresses = deviceDao.getAddressesForDeviceId(deviceId)
+            if (addresses.isEmpty()) {
+                emit(emptyList())
+            } else {
+                messageDao.getMessagesForAddresses(addresses).collect { entities ->
+                    val chatMessages = entities.map { entity ->
+                        ChatMessage(
+                            isSentByUser = entity.isSentByUser,
+                            text = entity.text,
+                            timestamp = entity.timestamp
+                        )
+                    }.sortedBy { it.timestamp }
+                    emit(chatMessages)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Get the device ID for a given address
+     */
+    suspend fun getDeviceIdForAddress(address: String): String? {
+        return deviceDao.getDevice(address)?.deviceId?.takeIf { it.isNotEmpty() }
+    }
+    
+    /**
      * Update a device's online status
      */
     suspend fun updateDeviceOnlineStatus(address: String, isOnline: Boolean) {
@@ -89,9 +119,10 @@ class ChatRepository(private val database: ChatDatabase) {
     /**
      * Save or update device information
      */
-    suspend fun saveOrUpdateDevice(address: String, name: String?, isOnline: Boolean = false) {
+    suspend fun saveOrUpdateDevice(address: String, name: String?, isOnline: Boolean = false, deviceId: String = "") {
         val device = DeviceEntity(
             address = address,
+            deviceId = deviceId,
             name = name,
             lastSeenTimestamp = System.currentTimeMillis(),
             isOnline = isOnline
@@ -142,32 +173,40 @@ class ChatRepository(private val database: ChatDatabase) {
      */
     fun getConversations(): Flow<List<Conversation>> {
         return combine(
-            messageDao.getLastMessages(),
-            deviceDao.getAllDevices()
-        ) { messages, devices ->
-            val deviceMap = devices.associateBy { it.address }
-            
-            // 1. Map to initial Conversation objects
-            val allConversations = messages.map { message ->
-                val device = deviceMap[message.deviceAddress]
-                Conversation(
-                    deviceAddress = message.deviceAddress,
-                    deviceName = (device?.name ?: message.deviceAddress).trim().replace(Regex("[\\x00-\\x1F]"), ""),
-                    lastMessage = message.text,
-                    timestamp = message.timestamp,
-                    isOnline = device?.isOnline ?: false
-                )
-            }
-
-            // 2. Group by deviceName and pick the most recent one
-            allConversations
-                .groupBy { it.deviceName }
-                .map { (_, convos) ->
-                    // Return the conversation with the latest timestamp
-                    // We keep the address of the latest conversation so we can try to connect to it
-                    convos.maxByOrNull { it.timestamp }!!
+            deviceDao.getAllDevices(),
+            messageDao.getAllMessages()
+        ) { devices, messages ->
+            // Group devices by deviceId
+            devices
+                .filter { it.deviceId.isNotEmpty() } // Only process devices with valid IDs
+                .groupBy { it.deviceId }
+                .mapNotNull { (deviceId, deviceList) ->
+                    // Use the most recent address for this deviceId
+                    val primaryDevice = deviceList.maxByOrNull { it.lastSeenTimestamp } ?: return@mapNotNull null
+                    
+                    // Get all messages for all addresses associated with this deviceId
+                    val deviceMessages = messages.filter { msg ->
+                        deviceList.any { dev -> dev.address == msg.deviceAddress }
+                    }
+                    
+                    val lastMessage = deviceMessages.maxByOrNull { it.timestamp }
+                    
+                    // Only include if there are messages
+                    if (lastMessage != null) {
+                        Conversation(
+                            deviceId = deviceId,
+                            deviceAddress = primaryDevice.address,
+                            deviceName = (primaryDevice.name ?: primaryDevice.address).trim().replace(Regex("[\\x00-\\x1F]"), ""),
+                            lastMessage = lastMessage.text,
+                            lastMessageTime = lastMessage.timestamp,
+                            isSentByUser = lastMessage.isSentByUser,
+                            isOnline = primaryDevice.isOnline
+                        )
+                    } else {
+                        null
+                    }
                 }
-                .sortedByDescending { it.timestamp }
+                .sortedByDescending { it.lastMessageTime }
         }
     }
 }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark mode colors -->
+    <color name="chat_background">#121212</color>
+    <color name="input_background">#1E1E1E</color>
+    <color name="sent_bubble">#0A84FF</color> <!-- iOS blue on dark -->
+    <color name="received_bubble">#2C2C2E</color>
+    <color name="profile_circle_bg">#0A84FF</color>
+    <color name="header_gradient_start">#0A84FF</color>
+    <color name="header_gradient_end">#0051D5</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B3B3B3</color>
+</resources>

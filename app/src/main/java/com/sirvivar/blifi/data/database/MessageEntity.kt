@@ -6,7 +6,8 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "messages")
 data class MessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val deviceAddress: String,      // Which device this message is with
+    val deviceAddress: String,      // Which device this message is with (MAC address)
+    val deviceId: String? = null,   // Device UUID (for grouping, nullable for migration)
     val text: String,                // Message content
     val isSentByUser: Boolean,       // true if sent, false if received
     val timestamp: Long              // Unix timestamp in milliseconds

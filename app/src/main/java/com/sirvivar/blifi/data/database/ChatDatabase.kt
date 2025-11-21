@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.sirvivar.blifi.utils.Constants.DATABASE_NAME
 
 @Database(
     entities = [MessageEntity::class, DeviceEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class ChatDatabase : RoomDatabase() {
@@ -19,13 +21,29 @@ abstract class ChatDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: ChatDatabase? = null
         
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add deviceId to devices table (non-null with default empty string)
+                database.execSQL("ALTER TABLE devices ADD COLUMN deviceId TEXT NOT NULL DEFAULT ''")
+                
+                // Add deviceId to messages table (nullable for backwards compatibility)
+                database.execSQL("ALTER TABLE messages ADD COLUMN deviceId TEXT")
+                
+                // For existing devices, use MAC address as initial deviceId
+                // This will be updated when devices reconnect and exchange proper UUIDs
+                database.execSQL("UPDATE devices SET deviceId = address WHERE deviceId = ''")
+            }
+        }
+        
         fun getDatabase(context: Context): ChatDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     ChatDatabase::class.java,
                     DATABASE_NAME
-                ).build()
+                )
+                .addMigrations(MIGRATION_1_2)
+                .build()
                 INSTANCE = instance
                 instance
             }

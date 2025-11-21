@@ -1,40 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="8dp">
+    android:paddingVertical="2dp"
+    android:paddingHorizontal="8dp">
 
-    <LinearLayout
-        android:id="@+id/message_container"
+    <!-- Message Bubble (dynamically positioned left/right) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/message_bubble"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="12dp"
-        android:background="@drawable/bg_message_bubble_sent"
+        android:layout_marginVertical="2dp"
+        app:cardCornerRadius="18dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="@color/sent_bubble"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintWidth_max="300dp">
+        app:layout_constraintWidth_max="260dp">
 
-        <TextView
-            android:id="@+id/message_text"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@android:color/white"
-            android:textSize="16sp"
-            tools:text="Hello, this is a message!" />
+            android:orientation="vertical"
+            android:paddingHorizontal="14dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="6dp">
 
-        <TextView
-            android:id="@+id/message_timestamp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:layout_marginTop="4dp"
-            android:textColor="#B3FFFFFF"
-            android:textSize="10sp"
-            tools:text="10:30 AM" />
+            <TextView
+                android:id="@+id/message_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                tools:text="Hello! How are you doing today?" />
 
-    </LinearLayout>
-
+            <TextView
+                android:id="@+id/message_timestamp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:layout_marginTop="2dp"
+                android:alpha="0.7"
+                android:textColor="@android:color/white"
+                android:textSize="11sp"
+                tools:text="10:30 AM" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,25 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="80dp"
     android:background="?attr/selectableItemBackground"
-    android:padding="16dp">
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="10dp">
 
-    <!-- Profile Circle -->
-    <TextView
-        android:id="@+id/profile_circle"
+    <!-- Profile Circle with Card -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/profile_card"
         android:layout_width="56dp"
         android:layout_height="56dp"
-        android:background="@drawable/circle_bg"
-        android:gravity="center"
-        android:textColor="@android:color/white"
-        android:textSize="24sp"
-        android:textStyle="bold"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="@color/profile_circle_bg"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:text="J" />
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/profile_circle"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            tools:text="A" />
+    </androidx.cardview.widget.CardView>
+
+    <!-- Online Indicator -->
+    <View
+        android:id="@+id/online_indicator"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:background="@drawable/online_indicator"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/profile_card"
+        app:layout_constraintEnd_toEndOf="@id/profile_card"
+        tools:visibility="visible" />
 
     <!-- Device Name -->
     <TextView
@@ -30,28 +52,26 @@
         android:layout_marginEnd="8dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="?android:attr/textColorPrimary"
-        android:textSize="16sp"
+        android:textColor="#000000"
+        android:textSize="17sp"
         android:textStyle="bold"
         app:layout_constraintEnd_toStartOf="@id/timestamp"
-        app:layout_constraintStart_toEndOf="@id/profile_circle"
-        app:layout_constraintTop_toTopOf="@id/profile_circle"
-        tools:text="John's Phone" />
+        app:layout_constraintStart_toEndOf="@id/profile_card"
+        app:layout_constraintTop_toTopOf="@id/profile_card"
+        tools:text="Device Name" />
 
-    <!-- Last Message Preview -->
+    <!-- Last Message -->
     <TextView
         android:id="@+id/last_message"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
         android:layout_marginTop="4dp"
         android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="?android:attr/textColorSecondary"
-        android:textSize="14sp"
-        app:layout_constraintBottom_toBottomOf="@id/profile_circle"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@id/profile_circle"
+        android:maxLines="2"
+        android:textColor="#666666"
+        android:textSize="15sp"
+        app:layout_constraintEnd_toEndOf="@id/device_name"
+        app:layout_constraintStart_toStartOf="@id/device_name"
         app:layout_constraintTop_toBottomOf="@id/device_name"
         tools:text="Hey, how are you doing?" />
 
@@ -60,24 +80,9 @@
         android:id="@+id/timestamp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="?android:attr/textColorSecondary"
-        android:textSize="12sp"
+        android:textColor="#999999"
+        android:textSize="14sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@id/device_name"
-        tools:text="2:30 PM" />
-
-    <!-- Online Indicator -->
-    <View
-        android:id="@+id/online_indicator"
-        android:layout_width="12dp"
-        android:layout_height="12dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="4dp"
-        android:background="@drawable/circle_bg"
-        android:backgroundTint="@android:color/holo_green_light"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/profile_circle"
-        app:layout_constraintEnd_toEndOf="@id/profile_circle"
-        tools:visibility="visible" />
-
+        tools:text="10:30 AM" />
 </androidx.constraintlayout.widget.ConstraintLayout>

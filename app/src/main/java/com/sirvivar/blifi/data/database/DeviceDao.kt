@@ -21,6 +21,12 @@ interface DeviceDao {
     @Query("SELECT address FROM devices WHERE name = :name")
     suspend fun getAddressesForName(name: String): List<String>
     
+    @Query("SELECT address FROM devices WHERE deviceId = :deviceId")
+    suspend fun getAddressesForDeviceId(deviceId: String): List<String>
+    
+    @Query("SELECT * FROM devices WHERE deviceId = :deviceId LIMIT 1")
+    suspend fun getDeviceByDeviceId(deviceId: String): DeviceEntity?
+    
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDevice(device: DeviceEntity)
     

@@ -40,12 +40,11 @@ class ConversationAdapter(
         fun bind(conversation: Conversation) {
             val name = conversation.deviceName
             deviceName.text = name
-            lastMessage.text = conversation.lastMessage
-            timestamp.text = formatTimestamp(conversation.timestamp)
+            lastMessage.text = conversation.lastMessage ?: "No messages"
+            timestamp.text = formatTimestamp(conversation.lastMessageTime)
             
-            // Set profile circle initial
-            val initial = if (name.isNotEmpty()) name.first().toString().uppercase() else "?"
-            profileCircle.text = initial
+            // Set profile circle to full device name (or initial if needed)
+            profileCircle.text = name
             
             // Set online status
             onlineIndicator.visibility = if (conversation.isOnline) View.VISIBLE else View.GONE
@@ -63,7 +62,7 @@ class ConversationAdapter(
 
     class ConversationDiffCallback : DiffUtil.ItemCallback<Conversation>() {
         override fun areItemsTheSame(oldItem: Conversation, newItem: Conversation): Boolean {
-            return oldItem.deviceAddress == newItem.deviceAddress
+            return oldItem.deviceId == newItem.deviceId  // Compare by deviceId instead of address
         }
 
         override fun areContentsTheSame(oldItem: Conversation, newItem: Conversation): Boolean {

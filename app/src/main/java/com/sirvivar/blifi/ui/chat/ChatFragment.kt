@@ -10,7 +10,6 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -32,6 +31,7 @@ import com.sirvivar.blifi.data.repository.ChatRepository
 import com.sirvivar.blifi.service.BluetoothChatService
 import com.sirvivar.blifi.ui.SharedViewModel
 import com.sirvivar.blifi.utils.ChatEventBus
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class ChatFragment : Fragment() {
@@ -43,7 +43,7 @@ class ChatFragment : Fragment() {
     private lateinit var singleChatView: ConstraintLayout
     private lateinit var messagesRecyclerView: RecyclerView
     private lateinit var messageInput: EditText
-    private lateinit var sendButton: Button
+    private lateinit var sendButton: android.widget.ImageButton
     private lateinit var conversationListRecyclerView: RecyclerView
     private lateinit var conversationAdapter: ConversationAdapter
     private lateinit var chatViewModel: ChatViewModel
@@ -161,21 +161,44 @@ class ChatFragment : Fragment() {
         messages.clear()
         messageAdapter.notifyDataSetChanged()
         
-        // Load chat history by name to merge conversations
-        loadChatHistory(name)
-        
         singleChatView.isVisible = true
         conversationListRecyclerView.isVisible = false
-        // activity?.title = name // We are using custom header now
         
         textChatName.text = name
         textChatStatus.text = "Offline" // Default
+        
+        // Get deviceId and load chat history
+        viewLifecycleOwner.lifecycleScope.launch {
+            val deviceId = chatRepository.getDeviceIdForAddress(address)
+            
+            if (deviceId != null) {
+                // DeviceId is available, load chat history
+                loadChatHistory(deviceId)
+            } else {
+                // Device not in DB yet, wait for identity exchange
+                Log.d(TAG, "Device ID not available yet for $address, waiting for IAM exchange...")
+                delay(1000)  // Wait for IAM message exchange
+                val retryDeviceId = chatRepository.getDeviceIdForAddress(address)
+                if (retryDeviceId != null) {
+                    loadChatHistory(retryDeviceId)
+                } else {
+                    // Still no deviceId, messages will load once IAM is received
+                    Log.d(TAG, "Still no device ID for $address after retry")
+                }
+            }
+        }
         
         // Observe device status for this address
         viewLifecycleOwner.lifecycleScope.launch {
             chatRepository.getDeviceFlow(address).collect { device ->
                 if (device != null) {
                     textChatName.text = device.name ?: "Unknown"
+                    
+                    // If deviceId becomes available and we haven't loaded history yet, load it now
+                    if (device.deviceId.isNotEmpty() && messages.isEmpty()) {
+                        loadChatHistory(device.deviceId)
+                    }
+                    
                     if (device.isOnline) {
                         textChatStatus.text = "Online"
                     } else {
@@ -325,9 +348,9 @@ class ChatFragment : Fragment() {
         }
     }
     
-    private fun loadChatHistory(name: String) {
+    private fun loadChatHistory(deviceId: String) {
         viewLifecycleOwner.lifecycleScope.launch {
-            chatRepository.getMessagesForName(name).collect { historyMessages ->
+            chatRepository.getMessagesForDeviceId(deviceId).collect { historyMessages ->
                 // Always update from database (source of truth)
                 // But only if we're still showing this chat
                 if (currentDeviceAddress != null) {

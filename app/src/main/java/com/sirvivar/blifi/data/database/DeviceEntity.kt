@@ -6,7 +6,8 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "devices")
 data class DeviceEntity(
     @PrimaryKey val address: String,    // Bluetooth MAC address
-    val name: String?,                   // Device name (can be null if unknown)
+    val deviceId: String = "",           // Permanent device UUID (for grouping chats)
+    val name: String?,                   // Device name (user-changeable, for display)
     val lastSeenTimestamp: Long,         // Last time device was seen/connected
     val isOnline: Boolean = false        // Current online status
 )

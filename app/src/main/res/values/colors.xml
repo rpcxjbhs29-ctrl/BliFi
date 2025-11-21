@@ -7,4 +7,16 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    
+    <!-- Apple Messages Color Palette -->
+    <color name="chat_background">#F2F2F7</color>
+    <color name="input_background">#EFEFF4</color>
+    <color name="sent_bubble">#007AFF</color>
+    <color name="received_bubble">#E9E9EB</color>
+    <color name="profile_circle_bg">#007AFF</color>
+    <color name="header_gradient_start">#007AFF</color>
+    <color name="header_gradient_end">#0051D5</color>
+    <color name="online_green">#34C759</color>
+    <color name="text_primary">#000000</color>
+    <color name="text_secondary">#666666</color>
 </resources>

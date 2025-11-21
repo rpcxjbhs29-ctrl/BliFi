@@ -168,12 +168,21 @@ class BluetoothChatService : Service() {
             Log.w(TAG, "Cannot send message, not connected.")
             return false
         }
+        // Ensure message fits within BLE 20-byte limit
+        var trimmedMessage = message
+        val maxBytes = 20
+        val bytes = message.toByteArray(Charsets.UTF_8)
+        if (bytes.size > maxBytes) {
+            // Truncate to maxBytes preserving UTF-8 characters
+            trimmedMessage = String(bytes, 0, maxBytes, Charsets.UTF_8)
+            Log.w(TAG, "Message truncated to fit BLE limit: '$trimmedMessage'")
+        }
         val characteristic = clientGatt
             ?.getService(SERVICE_UUID)
             ?.getCharacteristic(CHAT_CHARACTERISTIC_UUID)
         characteristic?.let {
             it.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            it.value = message.toByteArray(Charsets.UTF_8)
+            it.value = trimmedMessage.toByteArray(Charsets.UTF_8)
             return if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
                 clientGatt?.writeCharacteristic(it) ?: false
             } else {
@@ -281,10 +290,15 @@ class BluetoothChatService : Service() {
 
         override fun onDescriptorWrite(gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS && descriptor?.uuid == CCCD_UUID) {
-                Log.d(TAG, "Notifications enabled. Sending identity...")
-                // Send IAM message to identify ourselves
+                Log.d(TAG, "Notifications enabled. Setting connection state to CONNECTED")
+                
+                // Update connection state so messages can be sent
+                ChatEventBus.updateConnectionState(ConnectionState.CONNECTED)
+                
+                // Send IAM message with device UUID and name
+                val deviceUUID = Constants.getDeviceUUID(this@BluetoothChatService)
                 val localName = getLocalName()
-                sendMessage("IAM:$localName")
+                sendMessage("IAM:$deviceUUID:$localName")
             } else {
                 Log.d(TAG, "onDescriptorWrite: status=$status, uuid=${descriptor?.uuid}")
             }
@@ -447,22 +461,33 @@ class BluetoothChatService : Service() {
 
     private fun processIncomingMessage(device: BluetoothDevice, message: String, isServer: Boolean) {
         if (message.startsWith("IAM:")) {
-            val name = message.substring(4).trim()
-            Log.d(TAG, "Received identity from ${device.address}: $name")
-            updateDeviceName(device.address, name)
+            val parts = message.substring(4).split(":")
+            val deviceUUID: String
+            val name: String
+            
+            if (parts.size >= 2) {
+                // New format: "IAM:UUID:Name"
+                deviceUUID = parts[0]
+                name = parts.subList(1, parts.size).joinToString(":").trim()
+            } else {
+                // Old format: "IAM:Name" - use MAC address as fallback UUID
+                deviceUUID = device.address
+                name = parts[0].trim()
+            }
+            
+            Log.d(TAG, "Received identity from ${device.address}: UUID=$deviceUUID, Name=$name")
+            updateDeviceInfo(device.address, deviceUUID, name)
             
             // If we are the server, reply with our identity
             if (isServer) {
+                val ourDeviceUUID = Constants.getDeviceUUID(this)
                 val localName = getLocalName()
-                // We need to write to the characteristic and notify
-                // Note: This might be complex if we are also receiving. 
-                // But for now, let's try to update the characteristic and notify.
                 val characteristic = bluetoothGattServer
                     ?.getService(SERVICE_UUID)
                     ?.getCharacteristic(CHAT_CHARACTERISTIC_UUID)
                 
                 characteristic?.let {
-                    it.value = "IAM:$localName".toByteArray(Charsets.UTF_8)
+                    it.value = "IAM:$ourDeviceUUID:$localName".toByteArray(Charsets.UTF_8)
                     if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
                         bluetoothGattServer?.notifyCharacteristicChanged(device, it, false)
                     }
@@ -479,19 +504,26 @@ class BluetoothChatService : Service() {
         }
     }
 
-    private fun updateDeviceName(address: String, name: String) {
+    private fun updateDeviceInfo(address: String, deviceId: String, name: String) {
         CoroutineScope(Dispatchers.IO).launch {
             val database = ChatDatabase.getDatabase(applicationContext)
             val sanitizedName = name.replace(Regex("[\\x00-\\x1F]"), "")
             
-            // Update or insert device with the new name
+            // Update or insert device with the new info
             val existingDevice = database.deviceDao().getDevice(address)
             if (existingDevice != null) {
-                 database.deviceDao().upsertDevice(existingDevice.copy(name = sanitizedName, lastSeenTimestamp = System.currentTimeMillis()))
+                 database.deviceDao().upsertDevice(
+                     existingDevice.copy(
+                         deviceId = deviceId,
+                         name = sanitizedName,
+                         lastSeenTimestamp = System.currentTimeMillis()
+                     )
+                 )
             } else {
                 database.deviceDao().upsertDevice(
                     com.sirvivar.blifi.data.database.DeviceEntity(
                         address = address,
+                        deviceId = deviceId,
                         name = sanitizedName,
                         lastSeenTimestamp = System.currentTimeMillis(),
                         isOnline = true

@@ -13,6 +13,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE deviceAddress IN (:addresses) ORDER BY timestamp ASC")
     fun getMessagesForAddresses(addresses: List<String>): Flow<List<MessageEntity>>
     
+    @Query("SELECT * FROM messages ORDER BY timestamp ASC")
+    fun getAllMessages(): Flow<List<MessageEntity>>
+    
     @Insert
     suspend fun insertMessage(message: MessageEntity)
     
