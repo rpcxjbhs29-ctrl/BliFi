@@ -23,7 +23,8 @@ class ChatRepository(private val database: ChatDatabase) {
             deviceAddress = deviceAddress,
             text = text,
             isSentByUser = isSentByUser,
-            timestamp = timestamp
+            timestamp = timestamp,
+            isRead = isSentByUser  // Messages sent by user are marked as read; received messages are unread
         )
         messageDao.insertMessage(message)
     }
@@ -166,6 +167,13 @@ class ChatRepository(private val database: ChatDatabase) {
      */
     suspend fun deleteConversation(address: String) {
         messageDao.deleteConversation(address)
+    }
+
+    /**
+     * Mark all messages in a conversation as read
+     */
+    suspend fun markConversationAsRead(address: String) {
+        messageDao.markConversationAsRead(address)
     }
 
     /**

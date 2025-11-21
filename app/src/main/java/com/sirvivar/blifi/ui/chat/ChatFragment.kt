@@ -242,6 +242,11 @@ class ChatFragment : Fragment() {
         }
         ChatEventBus.setActiveChatAddress(address)
         
+        // Mark all messages in this conversation as read when opening chat
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatRepository.markConversationAsRead(address)
+        }
+
         // Try to connect if service is ready
         if (isBound && chatService != null) {
             Log.d(TAG, "Connecting to: $address")
@@ -275,6 +280,10 @@ class ChatFragment : Fragment() {
                     // chatService?.disconnectClient() // Keep connection alive
                     singleChatView.isVisible = false
                     conversationListRecyclerView.isVisible = true
+
+                    // Show bottom navigation when exiting chat
+                    activity?.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.nav_view)?.visibility = android.view.View.VISIBLE
+
                     activity?.title = "Chats"
                     ChatEventBus.setActiveChatAddress(null)
                 }

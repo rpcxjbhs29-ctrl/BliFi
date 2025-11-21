@@ -10,5 +10,6 @@ data class MessageEntity(
     val deviceId: String? = null,   // Device UUID (for grouping, nullable for migration)
     val text: String,                // Message content
     val isSentByUser: Boolean,       // true if sent, false if received
-    val timestamp: Long              // Unix timestamp in milliseconds
+    val timestamp: Long,             // Unix timestamp in milliseconds
+    val isRead: Boolean = false      // true if message has been read, false if unread
 )

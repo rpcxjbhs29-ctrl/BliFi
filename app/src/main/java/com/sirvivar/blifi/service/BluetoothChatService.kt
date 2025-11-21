@@ -637,53 +637,47 @@ class BluetoothChatService : Service() {
             Log.d(TAG, "Suppressing notification - user is active in chat: $address")
             return
         }
-        
+
         CoroutineScope(Dispatchers.IO).launch {
             val database = ChatDatabase.getDatabase(applicationContext)
             val device = database.deviceDao().getDevice(address)
             val senderName = device?.name ?: address
             val deviceId = device?.deviceId ?: address
-            
-            // Query last 5 messages for conversation history
-            val allMessages = database.messageDao().getMessagesForDeviceId(deviceId).first()
-            Log.d(TAG, "Notification: Found ${allMessages.size} total messages for deviceId=$deviceId")
-            
-            val recentMessages = allMessages.take(5).reversed() // Take first 5 and reverse for oldest-to-newest
-            Log.d(TAG, "Notification: Showing ${recentMessages.size} recent messages")
-            recentMessages.forEachIndexed { index, msg ->
-                Log.d(TAG, "  Message $index: '${msg.text}' from ${if (msg.isSentByUser) "me" else "them"}")
-            }
+
+            // Query unread messages for conversation history
+            val unreadMessages = database.messageDao().getUnreadMessagesForDevice(address).first()
+            Log.d(TAG, "Notification: Found ${unreadMessages.size} unread messages for address=$address")
 
             val intent = Intent(this@BluetoothChatService, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra("EXTRA_DEVICE_ADDRESS", address)
             }
-            
+
             val pendingIntent = PendingIntent.getActivity(
                 this@BluetoothChatService,
                 address.hashCode(),
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            
+
             // Create RemoteInput for direct reply
             val remoteInput = androidx.core.app.RemoteInput.Builder(KEY_TEXT_REPLY)
                 .setLabel("Reply to $senderName")
                 .build()
-            
+
             // Create reply intent
             val replyIntent = Intent(this@BluetoothChatService, BluetoothChatService::class.java).apply {
                 action = ACTION_REPLY
                 putExtra(EXTRA_DEVICE_ADDRESS, address)
             }
-            
+
             val replyPendingIntent = PendingIntent.getService(
                 this@BluetoothChatService,
                 address.hashCode() + 1,
                 replyIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
             )
-            
+
             // Create reply action
             val replyAction = NotificationCompat.Action.Builder(
                 android.R.drawable.ic_menu_send,
@@ -699,7 +693,7 @@ class BluetoothChatService : Service() {
                 .setName(senderName)
                 .setKey(address)
                 .build()
-                
+
             val me = androidx.core.app.Person.Builder()
                 .setName("You")
                 .setKey("me")
@@ -708,15 +702,13 @@ class BluetoothChatService : Service() {
             // Create MessagingStyle with conversation history
             val messagingStyle = NotificationCompat.MessagingStyle(me)
                 .setConversationTitle(senderName)
-            
-            // Add recent messages to show context
-            recentMessages.forEach { msgEntity ->
+
+            // Add unread messages to show context
+            // Note: The incoming message should already be in unreadMessages if it was just saved
+            unreadMessages.forEach { msgEntity ->
                 val person = if (msgEntity.isSentByUser) me else sender
                 messagingStyle.addMessage(msgEntity.text, msgEntity.timestamp, person)
             }
-            
-            // Add the NEW incoming message that triggered this notification
-            messagingStyle.addMessage(message, System.currentTimeMillis(), sender)
 
             val notification = NotificationCompat.Builder(this@BluetoothChatService, MESSAGE_CHANNEL_ID)
                 .setStyle(messagingStyle)
@@ -728,11 +720,10 @@ class BluetoothChatService : Service() {
                 .setColor(0x0A84FF) // BliFi Blue
                 .addAction(replyAction) // Direct reply action
                 .setShortcutId(address) // Critical for conversation threading
-                .setGroup("blifi_messages")
                 .build()
 
             if (ActivityCompat.checkSelfPermission(this@BluetoothChatService, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                // Use address hash as notification ID for stacking
+                // Use address hash as notification ID - this ensures same conversation gets same ID
                 val notificationId = address.hashCode()
                 NotificationManagerCompat.from(this@BluetoothChatService).notify(notificationId, notification)
             }
