@@ -112,18 +112,31 @@ class BluetoothChatService : Service() {
         
         // Handle direct reply from notification
         if (intent?.action == ACTION_REPLY) {
+            Log.d(TAG, "Reply action detected")
+            
             val address = intent.getStringExtra(EXTRA_DEVICE_ADDRESS)
             val remoteInput = androidx.core.app.RemoteInput.getResultsFromIntent(intent)
             val replyText = remoteInput?.getCharSequence(KEY_TEXT_REPLY)?.toString()
             
+            Log.d(TAG, "Reply: address=$address, text=$replyText, connected=${ChatEventBus.connectionState.value}")
+            
             if (address != null && !replyText.isNullOrBlank()) {
-                Log.d(TAG, "Reply from notification: $replyText to $address")
-                // Send message if we're connected
-                if (ChatEventBus.connectionState.value == ConnectionState.CONNECTED) {
-                    sendMessage(replyText)
-                } else {
-                    Log.w(TAG, "Cannot send reply - not connected")
+                // Try to send message
+                val success = sendMessage(replyText)
+                Log.d(TAG, "Reply send result: $success")
+                
+                // Dismiss the notification since reply was processed
+                if (ActivityCompat.checkSelfPermission(this@BluetoothChatService, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                    val notificationId = address.hashCode()
+                    NotificationManagerCompat.from(this@BluetoothChatService).cancel(notificationId)
+                    Log.d(TAG, "Notification dismissed for address $address")
                 }
+                
+                if (!success) {
+                    Log.w(TAG, "Failed to send reply - may not be connected to $address")
+                }
+            } else {
+                Log.w(TAG, "Reply failed - address or text is null")
             }
         }
         
@@ -334,7 +347,7 @@ class BluetoothChatService : Service() {
                 // Send IAM message with device UUID and name
                 val deviceUUID = Constants.getDeviceUUID(this@BluetoothChatService)
                 val localName = getLocalName()
-                sendMessage("IAM:$deviceUUID:$localName")
+                sendMessage("ID:$deviceUUID:$localName")
             } else {
                 Log.d(TAG, "onDescriptorWrite: status=$status, uuid=${descriptor?.uuid}")
             }
@@ -496,17 +509,17 @@ class BluetoothChatService : Service() {
     }
 
     private fun processIncomingMessage(device: BluetoothDevice, message: String, isServer: Boolean) {
-        if (message.startsWith("IAM:")) {
-            val parts = message.substring(4).split(":")
+        if (message.startsWith("ID:")) {
+            val parts = message.substring(3).split(":")
             val deviceUUID: String
             val name: String
-            
+
             if (parts.size >= 2) {
-                // New format: "IAM:UUID:Name"
+                // New format: "ID:UUID:Name"
                 deviceUUID = parts[0]
                 name = parts.subList(1, parts.size).joinToString(":").trim()
             } else {
-                // Old format: "IAM:Name" - use MAC address as fallback UUID
+                // Old format: "ID:Name" - use MAC address as fallback UUID
                 deviceUUID = device.address
                 name = parts[0].trim()
             }
@@ -523,7 +536,7 @@ class BluetoothChatService : Service() {
                     ?.getCharacteristic(CHAT_CHARACTERISTIC_UUID)
                 
                 characteristic?.let {
-                    it.value = "IAM:$ourDeviceUUID:$localName".toByteArray(Charsets.UTF_8)
+                    it.value = "ID:$ourDeviceUUID:$localName".toByteArray(Charsets.UTF_8)
                     if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
                         bluetoothGattServer?.notifyCharacteristicChanged(device, it, false)
                     }
@@ -714,12 +727,12 @@ class BluetoothChatService : Service() {
                 .setContentIntent(pendingIntent)
                 .setColor(0x0A84FF) // BliFi Blue
                 .addAction(replyAction) // Direct reply action
-                .setGroup("blifi_messages") // Group for stacking
-                .setOnlyAlertOnce(false) // Alert on each new message
+                .setShortcutId(address) // Critical for conversation threading
+                .setGroup("blifi_messages")
                 .build()
 
             if (ActivityCompat.checkSelfPermission(this@BluetoothChatService, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                // Use address hash as notification ID so messages from same device stack
+                // Use address hash as notification ID for stacking
                 val notificationId = address.hashCode()
                 NotificationManagerCompat.from(this@BluetoothChatService).notify(notificationId, notification)
             }

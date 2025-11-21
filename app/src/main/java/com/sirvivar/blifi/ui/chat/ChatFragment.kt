@@ -147,7 +147,11 @@ class ChatFragment : Fragment() {
                      // chatService?.disconnectClient() // Keep connection alive
                      singleChatView.isVisible = false
                      conversationListRecyclerView.isVisible = true
-                     activity?.title = "Chats"
+                     
+                     // Show bottom navigation when back button clicked
+                     activity?.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.nav_view)?.visibility = android.view.View.VISIBLE
+                     
+                     activity?.title = "BliFi Chats"
                      ChatEventBus.setActiveChatAddress(null)
                  }
              }
@@ -180,6 +184,9 @@ class ChatFragment : Fragment() {
         
         singleChatView.isVisible = true
         conversationListRecyclerView.isVisible = false
+        
+        // Hide bottom navigation when chat opens
+        activity?.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.nav_view)?.visibility = android.view.View.GONE
         
         // Enable back callback when chat opens
         backPressedCallback?.isEnabled = true
@@ -322,6 +329,10 @@ class ChatFragment : Fragment() {
                     currentDeviceAddress = null
                     singleChatView.isVisible = false
                     conversationListRecyclerView.isVisible = true
+                    
+                    // Show bottom navigation when chat closes
+                    activity?.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.nav_view)?.visibility = android.view.View.VISIBLE
+                    
                     activity?.title = "BliFi Chats"
                     ChatEventBus.setActiveChatAddress(null)
                     isEnabled = false // Disable after handling

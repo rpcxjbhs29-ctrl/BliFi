@@ -34,15 +34,15 @@ object Constants {
             context.contentResolver,
             Settings.Secure.ANDROID_ID
         )
-        
+
         // Combine with package name to create app-specific UUID
         // This ensures different apps have different IDs even on the same device
         val uniqueString = "${context.packageName}-$androidId"
-        
+
         // Create a deterministic UUID from the unique string
         val fullUUID = UUID.nameUUIDFromBytes(uniqueString.toByteArray()).toString()
-        
-        // Return first 8 characters to fit in BLE message (IAM:xxxxxxxx:Username = ~20 bytes)
-        return fullUUID.substring(0, 8)
+
+        // Return first 4 characters to allow more space for the username in IAM messages
+        return fullUUID.substring(0, 4)
     }
 }
