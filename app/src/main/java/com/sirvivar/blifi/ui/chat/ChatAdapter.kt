@@ -19,7 +19,7 @@ class ChatAdapter(private val messages: List<ChatMessage>) :
     RecyclerView.Adapter<ChatAdapter.MessageViewHolder>() {
 
     class MessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val messageBubble: CardView = itemView.findViewById(R.id.message_bubble)
+        val messageBubble: ConstraintLayout = itemView.findViewById(R.id.message_bubble)
         val messageText: TextView = itemView.findViewById(R.id.message_text)
         val messageTimestamp: TextView = itemView.findViewById(R.id.message_timestamp)
     }
@@ -44,16 +44,8 @@ class ChatAdapter(private val messages: List<ChatMessage>) :
 
         if (message.isSentByUser) {
             // Sent message (Right side, Blue bubble)
-            holder.messageBubble.setCardBackgroundColor(
-                ContextCompat.getColor(context, R.color.sent_bubble)
-            )
-            // Set text colors based on theme
-            val textColor = ContextCompat.getColor(context, R.color.text_primary)
-            holder.messageText.setTextColor(textColor)
-            holder.messageTimestamp.setTextColor(textColor)
-            
-            // Set bubble background using theme colors (already set above)
-
+            holder.messageBubble.setBackgroundResource(R.drawable.bg_message_sent)
+            holder.messageTimestamp.visibility = View.VISIBLE // Show timestamp for sent
             
             // Position on right
             params.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
@@ -61,11 +53,8 @@ class ChatAdapter(private val messages: List<ChatMessage>) :
             params.horizontalBias = 1.0f
         } else {
             // Received message (Left side, Gray bubble)
-            holder.messageBubble.setCardBackgroundColor(
-                ContextCompat.getColor(context, R.color.received_bubble)
-            )
-            holder.messageText.setTextColor(Color.BLACK)
-            holder.messageTimestamp.setTextColor(Color.parseColor("#80000000")) // Semi-transparent black
+            holder.messageBubble.setBackgroundResource(R.drawable.bg_message_received)
+            holder.messageTimestamp.visibility = View.VISIBLE // Show timestamp for received too? Or maybe logic differs
             
             // Position on left
             params.startToStart = ConstraintLayout.LayoutParams.PARENT_ID

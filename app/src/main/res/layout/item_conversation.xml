@@ -4,43 +4,44 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="80dp"
+    android:layout_height="76dp"
     android:background="?attr/selectableItemBackground"
-    android:paddingHorizontal="16dp"
-    android:paddingVertical="10dp">
+    android:paddingHorizontal="16dp">
 
-    <!-- Profile Circle with Card -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/profile_card"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        app:cardCornerRadius="28dp"
-        app:cardElevation="0dp"
-        app:cardBackgroundColor="@color/profile_circle_bg"
+    <!-- Profile Circle -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/profile_container"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:background="@drawable/bg_profile_circle"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
         <TextView
             android:id="@+id/profile_circle"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:textColor="@android:color/white"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
             android:textSize="20sp"
             android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
             tools:text="A" />
-    </androidx.cardview.widget.CardView>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Online Indicator -->
     <View
         android:id="@+id/online_indicator"
-        android:layout_width="14dp"
-        android:layout_height="14dp"
+        android:layout_width="12dp"
+        android:layout_height="12dp"
         android:background="@drawable/online_indicator"
+        android:backgroundTint="@color/online_green"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/profile_card"
-        app:layout_constraintEnd_toEndOf="@id/profile_card"
+        app:layout_constraintBottom_toBottomOf="@id/profile_container"
+        app:layout_constraintEnd_toEndOf="@id/profile_container"
         tools:visibility="visible" />
 
     <!-- Device Name -->
@@ -52,12 +53,14 @@
         android:layout_marginEnd="8dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="#000000"
+        android:textColor="@color/text_primary"
         android:textSize="17sp"
         android:textStyle="bold"
+        app:layout_constraintBottom_toTopOf="@id/last_message"
         app:layout_constraintEnd_toStartOf="@id/timestamp"
-        app:layout_constraintStart_toEndOf="@id/profile_card"
-        app:layout_constraintTop_toTopOf="@id/profile_card"
+        app:layout_constraintStart_toEndOf="@id/profile_container"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_chainStyle="packed"
         tools:text="Device Name" />
 
     <!-- Last Message -->
@@ -65,11 +68,12 @@
         android:id="@+id/last_message"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:maxLines="2"
-        android:textColor="#666666"
+        android:textColor="@color/text_secondary"
         android:textSize="15sp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="@id/device_name"
         app:layout_constraintStart_toStartOf="@id/device_name"
         app:layout_constraintTop_toBottomOf="@id/device_name"
@@ -80,9 +84,18 @@
         android:id="@+id/timestamp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="#999999"
-        android:textSize="14sp"
+        android:textColor="@color/text_secondary"
+        android:textSize="15sp"
+        app:layout_constraintBaseline_toBaselineOf="@id/device_name"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@id/device_name"
         tools:text="10:30 AM" />
+        
+    <!-- Divider -->
+    <View
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:background="@color/divider_color"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="@id/device_name" />
 </androidx.constraintlayout.widget.ConstraintLayout>

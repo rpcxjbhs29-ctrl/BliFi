@@ -1,0 +1,22 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.BliFi" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="colorPrimary">@color/black</item>
+        <item name="colorPrimaryVariant">@color/black</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">@color/sent_bubble</item>
+        <item name="colorSecondaryVariant">@color/sent_bubble</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor">@color/black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <!-- Background color -->
+        <item name="android:windowBackground">@color/chat_background</item>
+        <item name="android:colorBackground">@color/chat_background</item>
+        
+        <!-- Force Dark Mode -->
+        <item name="android:forceDarkAllowed" tools:targetApi="q">true</item>
+    </style>
+</resources>

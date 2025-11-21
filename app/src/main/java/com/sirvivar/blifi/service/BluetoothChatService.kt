@@ -600,13 +600,25 @@ class BluetoothChatService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
+            // Create Person object for the sender (iOS-style messaging)
+            val sender = androidx.core.app.Person.Builder()
+                .setName(senderName)
+                .setKey(address)
+                .build()
+
+            // Create MessagingStyle notification
+            val messagingStyle = NotificationCompat.MessagingStyle(sender)
+                .setConversationTitle(senderName)
+                .addMessage(message, System.currentTimeMillis(), sender)
+
             val notification = NotificationCompat.Builder(this@BluetoothChatService, MESSAGE_CHANNEL_ID)
-                .setContentTitle(senderName)
-                .setContentText(message)
-                .setSmallIcon(android.R.drawable.stat_notify_chat) // Use system icon
+                .setStyle(messagingStyle)
+                .setSmallIcon(android.R.drawable.stat_notify_chat)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
+                .setColor(0x0A84FF) // iOS Blue
                 .build()
 
             if (ActivityCompat.checkSelfPermission(this@BluetoothChatService, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
