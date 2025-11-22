@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -22,6 +23,7 @@ class ChatAdapter(private val messages: List<ChatMessage>) :
         val messageBubble: ConstraintLayout = itemView.findViewById(R.id.message_bubble)
         val messageText: TextView = itemView.findViewById(R.id.message_text)
         val messageTimestamp: TextView = itemView.findViewById(R.id.message_timestamp)
+        val readReceiptIndicator: ImageView = itemView.findViewById(R.id.read_receipt_indicator)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
@@ -35,7 +37,7 @@ class ChatAdapter(private val messages: List<ChatMessage>) :
         val context = holder.itemView.context
 
         holder.messageText.text = message.text
-        
+
         // Format timestamp
         val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
         holder.messageTimestamp.text = sdf.format(Date(message.timestamp))
@@ -46,7 +48,17 @@ class ChatAdapter(private val messages: List<ChatMessage>) :
             // Sent message (Right side, Glass blue bubble)
             holder.messageBubble.setBackgroundResource(R.drawable.bg_glass_bubble_sent)
             holder.messageTimestamp.visibility = View.VISIBLE
-            
+
+            // Show read receipt indicator for sent messages
+            holder.readReceiptIndicator.visibility = View.VISIBLE
+            if (message.isRead) {
+                // Both checks are blue (read)
+                holder.readReceiptIndicator.setImageResource(R.drawable.ic_check_double_read)
+            } else {
+                // Single check (sent but not delivered/read yet)
+                holder.readReceiptIndicator.setImageResource(R.drawable.ic_check_single)
+            }
+
             // Position on right
             params.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
             params.startToStart = ConstraintLayout.LayoutParams.UNSET
@@ -55,13 +67,16 @@ class ChatAdapter(private val messages: List<ChatMessage>) :
             // Received message (Left side, Glass gray bubble)
             holder.messageBubble.setBackgroundResource(R.drawable.bg_glass_bubble_received)
             holder.messageTimestamp.visibility = View.VISIBLE
-            
+
+            // Hide read receipt indicator for received messages
+            holder.readReceiptIndicator.visibility = View.GONE
+
             // Position on left
             params.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
             params.endToEnd = ConstraintLayout.LayoutParams.UNSET
             params.horizontalBias = 0.0f
         }
-        
+
         holder.messageBubble.layoutParams = params
     }
 

@@ -64,7 +64,11 @@ class BluetoothChatService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var advertisingRestartRunnable: Runnable? = null
     private var isAdvertising = false
-    
+
+    // For handling replies from notifications when not connected
+    private var pendingReplyMessage: String? = null
+    private var pendingReplyAddress: String? = null
+
     // Smart notification suppression
     @Volatile
     var currentActiveChat: String? = null
@@ -113,27 +117,37 @@ class BluetoothChatService : Service() {
         // Handle direct reply from notification
         if (intent?.action == ACTION_REPLY) {
             Log.d(TAG, "Reply action detected")
-            
+
             val address = intent.getStringExtra(EXTRA_DEVICE_ADDRESS)
             val remoteInput = androidx.core.app.RemoteInput.getResultsFromIntent(intent)
             val replyText = remoteInput?.getCharSequence(KEY_TEXT_REPLY)?.toString()
-            
+
             Log.d(TAG, "Reply: address=$address, text=$replyText, connected=${ChatEventBus.connectionState.value}")
-            
+
             if (address != null && !replyText.isNullOrBlank()) {
-                // Try to send message
-                val success = sendMessage(replyText)
-                Log.d(TAG, "Reply send result: $success")
-                
-                // Dismiss the notification since reply was processed
-                if (ActivityCompat.checkSelfPermission(this@BluetoothChatService, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                    val notificationId = address.hashCode()
-                    NotificationManagerCompat.from(this@BluetoothChatService).cancel(notificationId)
-                    Log.d(TAG, "Notification dismissed for address $address")
-                }
-                
-                if (!success) {
-                    Log.w(TAG, "Failed to send reply - may not be connected to $address")
+                // If we're already connected, send directly
+                if (ChatEventBus.connectionState.value == ConnectionState.CONNECTED) {
+                    val success = sendMessage(replyText)
+                    Log.d(TAG, "Reply send result: $success")
+
+                    // Dismiss the notification since reply was processed
+                    if (ActivityCompat.checkSelfPermission(this@BluetoothChatService, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                        val notificationId = address.hashCode()
+                        NotificationManagerCompat.from(this@BluetoothChatService).cancel(notificationId)
+                        Log.d(TAG, "Notification dismissed for address $address")
+                    }
+
+                    if (!success) {
+                        Log.w(TAG, "Failed to send reply even when connected - may not be connected to $address")
+                    }
+                } else {
+                    // Store the reply message to send after connection is established
+                    pendingReplyMessage = replyText
+                    pendingReplyAddress = address
+                    Log.d(TAG, "Storing pending reply for address $address, will send after connection")
+
+                    // Connect to the device
+                    connectToDevice(address)
                 }
             } else {
                 Log.w(TAG, "Reply failed - address or text is null")
@@ -280,12 +294,20 @@ class BluetoothChatService : Service() {
                     ChatEventBus.updateDeviceStatus(gatt.device.address, isOnline = false)
                     gatt.close()
                     clientGatt = null
-                    
+
+                    // If we were waiting to send a pending reply but got disconnected,
+                    // we should clear the pending reply
+                    if (pendingReplyMessage != null) {
+                        Log.w(TAG, "Connection lost while waiting to send pending reply, clearing pending reply")
+                        pendingReplyMessage = null
+                        pendingReplyAddress = null
+                    }
+
                     // If disconnected due to error, log it
                     if (status != BluetoothGatt.GATT_SUCCESS) {
                         Log.e(TAG, "Disconnected with error status: $status (${getGattStatusMessage(status)})")
                     }
-                    
+
                     // Do NOT auto-reconnect - causes infinite loop
                     // User can manually tap the device again to reconnect
                 }
@@ -328,6 +350,52 @@ class BluetoothChatService : Service() {
                 }
             } else {
                 Log.w(TAG, "Characteristic not found!")
+            }
+
+            // Check if there's a pending reply to send after services are discovered
+            if (pendingReplyMessage != null && pendingReplyAddress != null) {
+                // Verify this is the connection we're waiting for
+                if (gatt.device.address == pendingReplyAddress) {
+                    val replyMessage = pendingReplyMessage
+                    val replyAddress = pendingReplyAddress
+                    pendingReplyMessage = null
+                    pendingReplyAddress = null
+
+                    Log.d(TAG, "Sending pending reply message after services discovered")
+
+                    // Use a small delay to ensure everything is set up properly
+                    handler.postDelayed({
+                        if (ChatEventBus.connectionState.value == ConnectionState.CONNECTED) {
+                            val success = sendMessage(replyMessage ?: "")
+                            Log.d(TAG, "Pending reply send result: $success")
+
+                            // Save the sent message to the database so it appears in chat history
+                            if (success && replyMessage != null && replyAddress != null) {
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    val database = ChatDatabase.getDatabase(applicationContext)
+                                    val messageEntity = MessageEntity(
+                                        deviceAddress = replyAddress,
+                                        text = replyMessage,
+                                        isSentByUser = true,
+                                        timestamp = System.currentTimeMillis(),
+                                        isRead = false  // Initially mark as not read
+                                    )
+                                    database.messageDao().insertMessage(messageEntity)
+                                    Log.d(TAG, "Saved reply message to database")
+                                }
+                            }
+
+                            // Dismiss the notification since reply was processed
+                            if (ActivityCompat.checkSelfPermission(this@BluetoothChatService, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED && replyAddress != null) {
+                                val notificationId = replyAddress.hashCode()
+                                NotificationManagerCompat.from(this@BluetoothChatService).cancel(notificationId)
+                                Log.d(TAG, "Notification dismissed for address $replyAddress")
+                            }
+                        } else {
+                            Log.w(TAG, "Connection lost before sending pending reply")
+                        }
+                    }, 300) // Small delay to ensure connection is stable
+                }
             }
         }
 

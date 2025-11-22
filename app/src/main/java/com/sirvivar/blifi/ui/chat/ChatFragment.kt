@@ -1,5 +1,6 @@
 package com.sirvivar.blifi.ui.chat
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -70,7 +71,7 @@ class ChatFragment : Fragment() {
             chatService = binder.getService()
             isBound = true
             Log.d(TAG, "Service connected successfully")
-            
+
             // If there's a pending connection, attempt it now
             pendingConnectionAddress?.let { address ->
                 Log.d(TAG, "Attempting pending connection to: $address")
@@ -101,7 +102,7 @@ class ChatFragment : Fragment() {
             isBound = false
         }
     }
-    
+
     override fun onResume() {
         super.onResume()
         // Set active chat to suppress notifications while viewing
@@ -110,7 +111,7 @@ class ChatFragment : Fragment() {
             Log.d(TAG, "onResume - Set active chat: $address")
         }
     }
-    
+
     override fun onPause() {
         super.onPause()
         // Clear active chat to allow notifications
@@ -119,24 +120,24 @@ class ChatFragment : Fragment() {
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
-        val root = inflater.inflate(R.layout.fragment_chats, container, false)
-        
+        val root = inflater.inflate(R.layout.fragment_chat, container, false)
+
         // Initialize repository and ViewModel
         val database = ChatDatabase.getDatabase(requireContext())
         chatRepository = ChatRepository(database)
         val factory = ChatViewModelFactory(chatRepository)
         chatViewModel = ViewModelProvider(this, factory)[ChatViewModel::class.java]
-        
+
         singleChatView = root.findViewById(R.id.view_single_chat)
         messagesRecyclerView = root.findViewById(R.id.recycler_chat_messages)
         messageInput = root.findViewById(R.id.message_input)
         sendButton = root.findViewById(R.id.send_button)
-        
+
         // Initialize header views
         btnBack = root.findViewById(R.id.btn_back)
         textChatName = root.findViewById(R.id.text_chat_name)
         textChatStatus = root.findViewById(R.id.text_chat_status)
-        
+
         btnBack.setOnClickListener {
              // Handle back navigation manually
              if (singleChatView.isVisible) {
@@ -147,20 +148,20 @@ class ChatFragment : Fragment() {
                      // chatService?.disconnectClient() // Keep connection alive
                      singleChatView.isVisible = false
                      conversationListRecyclerView.isVisible = true
-                     
+
                      // Show bottom navigation when back button clicked
                      activity?.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.nav_view)?.visibility = android.view.View.VISIBLE
-                     
+
                      activity?.title = "BliFi Chats"
                      ChatEventBus.setActiveChatAddress(null)
                  }
              }
         }
-        
+
         conversationListRecyclerView = root.findViewById(R.id.recycler_chat_list)
         setupConversationList()
         setupSingleChatView()
-        
+
         return root
     }
 
@@ -170,7 +171,7 @@ class ChatFragment : Fragment() {
         }
         conversationListRecyclerView.layoutManager = LinearLayoutManager(context)
         conversationListRecyclerView.adapter = conversationAdapter
-        
+
         chatViewModel.conversations.observe(viewLifecycleOwner) { conversations ->
             conversationAdapter.submitList(conversations)
             conversationListRecyclerView.isVisible = !singleChatView.isVisible
@@ -181,23 +182,23 @@ class ChatFragment : Fragment() {
         currentDeviceAddress = address
         messages.clear()
         messageAdapter.notifyDataSetChanged()
-        
+
         singleChatView.isVisible = true
         conversationListRecyclerView.isVisible = false
-        
+
         // Hide bottom navigation when chat opens
         activity?.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.nav_view)?.visibility = android.view.View.GONE
-        
+
         // Enable back callback when chat opens
         backPressedCallback?.isEnabled = true
-        
+
         textChatName.text = name
         textChatStatus.text = "Offline" // Default
-        
+
         // Get deviceId and load chat history
         viewLifecycleOwner.lifecycleScope.launch {
             val deviceId = chatRepository.getDeviceIdForAddress(address)
-            
+
             if (deviceId != null) {
                 // DeviceId is available, load chat history
                 loadChatHistory(deviceId)
@@ -214,18 +215,18 @@ class ChatFragment : Fragment() {
                 }
             }
         }
-        
+
         // Observe device status for this address
         viewLifecycleOwner.lifecycleScope.launch {
             chatRepository.getDeviceFlow(address).collect { device ->
                 if (device != null) {
                     textChatName.text = device.name ?: "Unknown"
-                    
+
                     // If deviceId becomes available and we haven't loaded history yet, load it now
                     if (device.deviceId.isNotEmpty() && messages.isEmpty()) {
                         loadChatHistory(device.deviceId)
                     }
-                    
+
                     if (device.isOnline) {
                         textChatStatus.text = "Online"
                     } else {
@@ -241,10 +242,11 @@ class ChatFragment : Fragment() {
             }
         }
         ChatEventBus.setActiveChatAddress(address)
-        
-        // Mark all messages in this conversation as read when opening chat
+
+        // Mark only received messages in this conversation as read when opening chat
+        // (don't mark sent messages as read - that would be incorrect)
         viewLifecycleOwner.lifecycleScope.launch {
-            chatRepository.markConversationAsRead(address)
+            chatRepository.markReceivedMessagesAsReadByAddress(address)
         }
 
         // Try to connect if service is ready
@@ -338,10 +340,10 @@ class ChatFragment : Fragment() {
                     currentDeviceAddress = null
                     singleChatView.isVisible = false
                     conversationListRecyclerView.isVisible = true
-                    
+
                     // Show bottom navigation when chat closes
                     activity?.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.nav_view)?.visibility = android.view.View.VISIBLE
-                    
+
                     activity?.title = "BliFi Chats"
                     ChatEventBus.setActiveChatAddress(null)
                     isEnabled = false // Disable after handling
@@ -364,10 +366,10 @@ class ChatFragment : Fragment() {
             val messageText = messageInput.text.toString().trim()
             if (messageText.isNotEmpty()) {
                 val success = chatService?.sendMessage(messageText) ?: false
-                
+
                 if (success) {
                     messageInput.text.clear()
-                    
+
                     // Save sent message to database - UI will update from database flow
                     currentDeviceAddress?.let { address ->
                         viewLifecycleOwner.lifecycleScope.launch {
@@ -385,7 +387,7 @@ class ChatFragment : Fragment() {
             }
         }
     }
-    
+
     private fun loadChatHistory(deviceId: String) {
         viewLifecycleOwner.lifecycleScope.launch {
             chatRepository.getMessagesForDeviceId(deviceId).collect { historyMessages ->

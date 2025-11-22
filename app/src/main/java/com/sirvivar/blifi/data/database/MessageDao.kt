@@ -39,4 +39,10 @@ interface MessageDao {
 
     @Query("UPDATE messages SET isRead = 1 WHERE deviceId = :deviceId AND isSentByUser = 0")
     suspend fun markReceivedMessagesAsRead(deviceId: String)
+
+    @Query("UPDATE messages SET isRead = 1 WHERE deviceAddress = :address AND isSentByUser = 0")
+    suspend fun markReceivedMessagesAsReadByAddress(address: String)
+
+    @Query("UPDATE messages SET isRead = :isRead WHERE id = :id")
+    suspend fun updateMessageReadStatus(id: Long, isRead: Boolean)
 }

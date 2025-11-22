@@ -24,7 +24,7 @@ class ChatRepository(private val database: ChatDatabase) {
             text = text,
             isSentByUser = isSentByUser,
             timestamp = timestamp,
-            isRead = isSentByUser  // Messages sent by user are marked as read; received messages are unread
+            isRead = false  // Initially mark all messages as not read; will be updated when recipient reads them
         )
         messageDao.insertMessage(message)
     }
@@ -38,7 +38,8 @@ class ChatRepository(private val database: ChatDatabase) {
                 ChatMessage(
                     isSentByUser = entity.isSentByUser,
                     text = entity.text,
-                    timestamp = entity.timestamp
+                    timestamp = entity.timestamp,
+                    isRead = entity.isRead
                 )
             }
         }
@@ -63,7 +64,8 @@ class ChatRepository(private val database: ChatDatabase) {
                         ChatMessage(
                             isSentByUser = entity.isSentByUser,
                             text = entity.text,
-                            timestamp = entity.timestamp
+                            timestamp = entity.timestamp,
+                            isRead = entity.isRead
                         )
                     }
                     emit(chatMessages)
@@ -86,7 +88,8 @@ class ChatRepository(private val database: ChatDatabase) {
                         ChatMessage(
                             isSentByUser = entity.isSentByUser,
                             text = entity.text,
-                            timestamp = entity.timestamp
+                            timestamp = entity.timestamp,
+                            isRead = entity.isRead
                         )
                     }.sortedBy { it.timestamp }
                     emit(chatMessages)
@@ -174,6 +177,20 @@ class ChatRepository(private val database: ChatDatabase) {
      */
     suspend fun markConversationAsRead(address: String) {
         messageDao.markConversationAsRead(address)
+    }
+
+    /**
+     * Update the read status of a specific message
+     */
+    suspend fun updateMessageReadStatus(id: Long, isRead: Boolean) {
+        messageDao.updateMessageReadStatus(id, isRead)
+    }
+
+    /**
+     * Mark received messages in a conversation as read by address
+     */
+    suspend fun markReceivedMessagesAsReadByAddress(address: String) {
+        messageDao.markReceivedMessagesAsReadByAddress(address)
     }
 
     /**
