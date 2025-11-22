@@ -120,7 +120,7 @@ class ChatFragment : Fragment() {
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
-        val root = inflater.inflate(R.layout.fragment_chat, container, false)
+        val root = inflater.inflate(R.layout.fragment_chats, container, false)
 
         // Initialize repository and ViewModel
         val database = ChatDatabase.getDatabase(requireContext())
