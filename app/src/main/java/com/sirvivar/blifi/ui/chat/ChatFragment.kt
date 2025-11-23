@@ -58,6 +58,7 @@ class ChatFragment : Fragment() {
     private lateinit var messageAdapter: ChatAdapter
     private val messages = mutableListOf<ChatMessage>()
     private var currentDeviceAddress: String? = null
+    private var isLoadedById = false
 
     private val sharedViewModel: SharedViewModel by activityViewModels()
     private var chatService: BluetoothChatService? = null
@@ -180,6 +181,7 @@ class ChatFragment : Fragment() {
 
     private fun openChat(address: String, name: String) {
         currentDeviceAddress = address
+        isLoadedById = false
         messages.clear()
         messageAdapter.notifyDataSetChanged()
 
@@ -203,15 +205,18 @@ class ChatFragment : Fragment() {
                 // DeviceId is available, load chat history
                 loadChatHistory(deviceId)
             } else {
-                // Device not in DB yet, wait for identity exchange
-                Log.d(TAG, "Device ID not available yet for $address, waiting for IAM exchange...")
-                delay(1000)  // Wait for IAM message exchange
-                val retryDeviceId = chatRepository.getDeviceIdForAddress(address)
-                if (retryDeviceId != null) {
-                    loadChatHistory(retryDeviceId)
-                } else {
-                    // Still no deviceId, messages will load once IAM is received
-                    Log.d(TAG, "Still no device ID for $address after retry")
+                // Device not in DB yet or no ID, load by address as fallback
+                Log.d(TAG, "Device ID not available for $address, loading by address")
+                loadChatHistoryByAddress(address)
+                
+                // Still try to get the ID if it comes in later
+                launch {
+                    delay(1000)
+                    val retryDeviceId = chatRepository.getDeviceIdForAddress(address)
+                    if (retryDeviceId != null) {
+                        Log.d(TAG, "Device ID found after delay: $retryDeviceId, switching to ID-based loading")
+                        loadChatHistory(retryDeviceId)
+                    }
                 }
             }
         }
@@ -222,8 +227,10 @@ class ChatFragment : Fragment() {
                 if (device != null) {
                     textChatName.text = device.name ?: "Unknown"
 
-                    // If deviceId becomes available and we haven't loaded history yet, load it now
-                    if (device.deviceId.isNotEmpty() && messages.isEmpty()) {
+                    // If deviceId becomes available and we are not yet loading by ID, switch to ID-based loading
+                    // This ensures we merge history from previous addresses if this is a reconnection
+                    if (device.deviceId.isNotEmpty() && !isLoadedById) {
+                        Log.d(TAG, "Device ID became available: ${device.deviceId}. Switching to ID-based history.")
                         loadChatHistory(device.deviceId)
                     }
 
@@ -388,12 +395,36 @@ class ChatFragment : Fragment() {
         }
     }
 
+    private var messageLoadJob: kotlinx.coroutines.Job? = null
+
     private fun loadChatHistory(deviceId: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
+        // Cancel any existing loading job to prevent race conditions
+        messageLoadJob?.cancel()
+        isLoadedById = true
+        
+        messageLoadJob = viewLifecycleOwner.lifecycleScope.launch {
             chatRepository.getMessagesForDeviceId(deviceId).collect { historyMessages ->
                 // Always update from database (source of truth)
                 // But only if we're still showing this chat
                 if (currentDeviceAddress != null) {
+                    messages.clear()
+                    messages.addAll(historyMessages)
+                    messageAdapter.notifyDataSetChanged()
+                    if (messages.isNotEmpty()) {
+                        messagesRecyclerView.scrollToPosition(messages.size - 1)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun loadChatHistoryByAddress(address: String) {
+        // Cancel any existing loading job to prevent race conditions
+        messageLoadJob?.cancel()
+        
+        messageLoadJob = viewLifecycleOwner.lifecycleScope.launch {
+            chatRepository.getMessagesForDevice(address).collect { historyMessages ->
+                if (currentDeviceAddress == address) {
                     messages.clear()
                     messages.addAll(historyMessages)
                     messageAdapter.notifyDataSetChanged()

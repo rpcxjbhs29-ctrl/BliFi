@@ -201,9 +201,9 @@ class ChatRepository(private val database: ChatDatabase) {
             deviceDao.getAllDevices(),
             messageDao.getAllMessages()
         ) { devices, messages ->
-            // Group devices by deviceId
-            devices
-                .filter { it.deviceId.isNotEmpty() } // Only process devices with valid IDs
+            // 1. Process devices WITH deviceId (Group by deviceId)
+            val conversationsWithId = devices
+                .filter { it.deviceId.isNotEmpty() }
                 .groupBy { it.deviceId }
                 .mapNotNull { (deviceId, deviceList) ->
                     // Use the most recent address for this deviceId
@@ -216,21 +216,43 @@ class ChatRepository(private val database: ChatDatabase) {
                     
                     val lastMessage = deviceMessages.maxByOrNull { it.timestamp }
                     
-                    // Only include if there are messages
-                    if (lastMessage != null) {
+                    // Only include if there are messages OR if it's a known device
+                    if (lastMessage != null || deviceList.isNotEmpty()) {
                         Conversation(
                             deviceId = deviceId,
                             deviceAddress = primaryDevice.address,
                             deviceName = (primaryDevice.name ?: primaryDevice.address).trim().replace(Regex("[\\x00-\\x1F]"), ""),
-                            lastMessage = lastMessage.text,
-                            lastMessageTime = lastMessage.timestamp,
-                            isSentByUser = lastMessage.isSentByUser,
+                            lastMessage = lastMessage?.text,
+                            lastMessageTime = lastMessage?.timestamp ?: primaryDevice.lastSeenTimestamp,
+                            isSentByUser = lastMessage?.isSentByUser ?: false,
                             isOnline = primaryDevice.isOnline
                         )
                     } else {
                         null
                     }
                 }
+
+            // 2. Process devices WITHOUT deviceId (Group by address - essentially individual)
+            val conversationsWithoutId = devices
+                .filter { it.deviceId.isEmpty() }
+                .mapNotNull { device ->
+                    // Get messages for this specific address
+                    val deviceMessages = messages.filter { msg -> msg.deviceAddress == device.address }
+                    val lastMessage = deviceMessages.maxByOrNull { it.timestamp }
+
+                    Conversation(
+                        deviceId = "", // Empty ID
+                        deviceAddress = device.address,
+                        deviceName = (device.name ?: device.address).trim().replace(Regex("[\\x00-\\x1F]"), ""),
+                        lastMessage = lastMessage?.text,
+                        lastMessageTime = lastMessage?.timestamp ?: device.lastSeenTimestamp,
+                        isSentByUser = lastMessage?.isSentByUser ?: false,
+                        isOnline = device.isOnline
+                    )
+                }
+
+            // Combine and sort
+            (conversationsWithId + conversationsWithoutId)
                 .sortedByDescending { it.lastMessageTime }
         }
     }
